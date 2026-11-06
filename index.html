@@ -92,6 +92,7 @@ tr:hover td{background:#13223c}
 .src a{color:var(--acc2);text-decoration:none}
 .src .st{font-size:12px;border-radius:6px;padding:1px 7px;margin-left:6px;background:#14301d;color:var(--ok)}
 .src .st.fail{background:#3a1712;color:var(--bad)}
+.src .srcsub{color:var(--dim);font-size:12px;line-height:1.5;margin:-2px 0 4px}
 .links{font-size:13.5px;line-height:2.1}
 .links a{color:var(--acc2);text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;word-break:break-all}
 .links button{margin-left:8px}
@@ -124,7 +125,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
 </header>
 <nav id="qnav">
-  <a href="#cGen" data-tab="gen">①② 选 IP</a><a href="#cTop" data-tab="top">🏆 今日推荐</a><a href="#cSub" data-tab="sub">③ 订阅</a><a href="#cDom" data-tab="dom">④ 域名</a><a href="#cV6" data-tab="v6">⑤ IPv6</a><a href="#cBig" data-tab="big">⑥ 大池</a><a href="#cLinks" data-tab="links">直链</a><a href="#cSrc" data-tab="src">来源</a><a href="#cNote" data-tab="note">说明</a>
+  <a href="#cTop" data-tab="top">🏆 今日推荐</a><a href="#cGen" data-tab="gen">①② 选 IP</a><a href="#cSub" data-tab="sub">③ 订阅</a><a href="#cDom" data-tab="dom">④ 域名</a><a href="#cV6" data-tab="v6">⑤ IPv6</a><a href="#cBig" data-tab="big">⑥ 大池</a><a href="#cLinks" data-tab="links">直链</a><a href="#cSrc" data-tab="src">来源</a><a href="#cNote" data-tab="note">说明</a>
 </nav>
 
 <div class="card">
@@ -289,10 +290,11 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card">
   <h3>④ 优选域名（可直接当节点地址用）</h3>
-  <div class="note">优选域名 = 解析到优质 CF 边缘的域名，效果类似优选 IP 但不用管 IP 失效。带「分流」的是社区维护的运营商分流域名（第三方维护，稳定性自行判断）；其余为 svip-s 收集的大厂 CF 域名。点「批量实测」从你当前网络逐个测它们的真实延迟与落地机房。</div>
+  <div class="note">优选域名 = 解析到优质 CF 边缘的域名，效果类似优选 IP 但不用管 IP 失效。列表由 <b>6 个域名源每轮聚合去重</b>（svip-s / BestCF 全量 / BestCF 亚洲 / cf-nodes / cmliu 官方 / BestCF 高访问量），每行备注尾部标了出处，聚合时已用 DNS 解析筛掉失效域名；带「分流」的是社区维护的运营商分流域名（第三方维护，稳定性自行判断）。点「批量实测」从你当前网络逐个测它们的真实延迟与落地机房。</div>
   <div class="ctrl">
     <button class="btn primary" id="btnDomTest">⚡ 批量实测</button>
     <button class="btn" id="btnDomCopy">复制全部域名</button>
+    <button class="btn" id="btnDomLink">复制聚合直链</button>
     <span class="selinfo" id="domininfo"></span>
   </div>
   <div id="domlist" class="scrollbox" style="margin-top:8px;max-height:264px"></div>
@@ -358,6 +360,7 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card">
   <h3>数据来源</h3>
+  <div class="note">每个源一行：绿色徽标是本轮实际收录条数；小字依次是<b>本轮拉取条数 · 源站自己的更新节奏 · 本站本轮抓取时间</b>。收录为 0 的会注明原因（源格式变化无地区标注 / 源内容异常等），不是本站漏抓。点源名可看源站原文。</div>
   <div class="src" id="sources"></div>
   <h3 style="margin-top:16px">最近更新记录</h3>
   <div class="hist" id="history"></div>
@@ -371,10 +374,10 @@ footer a{color:var(--acc2);text-decoration:none}
     <b>第二步 · 验</b> — 对清单点「本地可用检测」或「本地测速」：这是在<b>你自己的网络</b>上现场测，通不通、多少毫秒以这个为准；本站数据是各源站在自家测试地测的，只作参考。<br>
     <b>第三步 · 用</b> — 直接复制清单粘进客户端；或在「③ 订阅」里存一份<b>快照</b>，生成你的专属链接，只含你测通的那批，不随聚合变动。<br>
     <b>第四步 · 长效</b> — 想长期自动更新：用「③ 订阅」的实时订阅链接（随本站每轮聚合刷新），或去「直链」拿现成分组文件；想用某家原味的，复制「直链」里各源原始直链，源站自己更新。<br>
-    <b>每个类目干什么</b> — 选 IP：生成与实测清单；今日推荐：源站测速 Top 20；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况与更新记录；说明：本页。
+    <b>每个类目干什么</b> — 今日推荐（默认首页）：源站测速 Top 20，现成可用；选 IP：生成与实测清单；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况、更新节奏与抓取时间；说明：本页。
   </div>
   <div class="note">
-    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 19 个公开优选源拉取清单（实测源、全国三网源、IPv6 源、优选域名，明细见上方「数据来源」），统一格式、去重后生成总池。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
+    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 24 个公开优选源拉取清单（18 个 IP 源 + 6 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP 被多个源收录只算一次；某个源某轮抓取失败，它独有的条目会临时掉出、下一轮自动恢复。页面顶部「更新于」就是最近一轮的时间。<br>
     <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 握手探测（超时统一 5 秒，对齐主流客户端健康检查的默认口径；证书不匹配 IP 会报错返回，测的是报错前耗时）：有响应 = 你当前网络能连上该 IP:端口，不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
     <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。<br>
@@ -1175,7 +1178,7 @@ $('btnBigSnapCopy').addEventListener('click', () => copyText($('bigSnapUrl').val
 // ===== 卡片折叠（移动端默认收起次要卡片）=====
 const TABMAP = { gen: ['cGen', 'cList'], top: ['cTop'], sub: ['cSub'], dom: ['cDom'], v6: ['cV6'], big: ['cBig'], links: ['cLinks', 'cRaw'], src: ['cSrc'], note: ['cNote'] };
 function activateTab(name){
-  if(!TABMAP[name]) name = 'gen';
+  if(!TABMAP[name]) name = 'top';
   const show = new Set(TABMAP[name]);
   document.querySelectorAll('.card').forEach(c => { c.style.display = show.has(c.id) ? '' : 'none'; });
   document.querySelectorAll('#qnav a').forEach(a => a.classList.toggle('on', a.dataset.tab === name));
@@ -1186,7 +1189,7 @@ function initTabs(){
     activateTab(a.dataset.tab);
     history.replaceState(null, '', '#' + (TABMAP[a.dataset.tab] || ['cGen'])[0]);
   }));
-  let start = 'gen';
+  let start = 'top';
   const h = (window.__initHash || location.hash).replace('#', '');
   for(const [tab, cards] of Object.entries(TABMAP)) if(cards.includes(h)) { start = tab; break; }
   activateTab(start);
@@ -1308,6 +1311,8 @@ $('btnShare').addEventListener('click', () => { saveCfg(); copyText(location.hre
 $('subUi').addEventListener('change', refreshSub);
 $('aggFreq').addEventListener('change', refreshAggNote);
 $('btnDomTest').addEventListener('click', testDomains);
+$('btnDomLink').addEventListener('click', () =>
+  copyText(new URL('data/domains.txt', location.href).href, '已复制优选域名聚合直链（随每轮聚合自动更新）'));
 $('btnDomCopy').addEventListener('click', () =>
   copyText(DOMAINS.map(d => d.dom).join('\n'), `已复制 ${DOMAINS.length} 个域名`));
 $('btnV6Scan').addEventListener('click', scanV6);
@@ -1349,7 +1354,7 @@ $('btnTopLink').addEventListener('click', () =>
     `<div>🏆 今日推荐 Top 20（${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${new URL('data/top.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/top.txt">复制</button></div>` +
     Object.entries(META.groups).map(([k, g]) =>
-    `<div>${g.name}（${g.count} 条） <a href="${g.file}" target="_blank" rel="noopener">${new URL(g.file, location.href).href}</a>` +
+    `<div>${g.name}（${g.count} ${k === 'domains' ? '个' : '条'}） <a href="${g.file}" target="_blank" rel="noopener">${new URL(g.file, location.href).href}</a>` +
     `<button class="pbtn" data-link="${g.file}">复制</button></div>`).join('') +
     `<div>IPv6 池（${META.v6_total || 0} 条） <a href="data/all6.txt" target="_blank" rel="noopener">${new URL('data/all6.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/all6.txt">复制</button></div>`;
@@ -1368,7 +1373,12 @@ $('btnTopLink').addEventListener('click', () =>
     ['天诚优选 2', 'https://bestcf.tools12345.com/tiancheng2/all.txt', '一天三次'],
     ['vvHan 优选', 'https://bestcf.tools12345.com/vvhan/ipv4.txt', '半小时 · 分三网'],
     ['NiREvil 优选', 'https://bestcf.tools12345.com/nirevil/ipv4.txt', '每日更新'],
-    ['优选域名（svip-s）', 'https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt', '整点更新'],
+    ['优选域名（svip-s）', 'https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt', '域名源 · 整点更新'],
+    ['优选域名（BestCF 全量）', 'https://bestcf.tools12345.com/domain/all.txt', '域名源 · 随源站'],
+    ['优选域名（BestCF 亚洲）', 'https://bestcf.tools12345.com/domain/Domain-Asia.txt', '域名源 · 随源站'],
+    ['优选域名（cf-nodes）', 'https://raw.githubusercontent.com/wukan1986/cf-nodes/main/best_domains.txt', '域名源 · 仓库维护'],
+    ['优选域名（cmliu 官方）', 'https://raw.githubusercontent.com/cmliu/CF-Pages-BestCF/main/cf_domains.txt', '域名源 · 投稿合并'],
+    ['优选域名（BestCF 高访问量）', 'https://bestcf.tools12345.com/domain/Domain-TOP.txt', '域名源 · 随源站'],
     ['CFYes IPv6', 'https://bestcf.tools12345.com/cfyes/ipv6.txt', '半小时 · 分三网'],
     ['vvHan IPv6', 'https://bestcf.tools12345.com/vvhan/ipv6.txt', '半小时 · 分三网'],
     ['NiREvil IPv6', 'https://bestcf.tools12345.com/nirevil/ipv6.txt', '每日更新'],
@@ -1381,14 +1391,16 @@ $('btnTopLink').addEventListener('click', () =>
   $('sources').innerHTML = META.sources.map(s =>
     `<div>${s.url ? `<a href="${s.url}" target="_blank" rel="noopener">${s.name}</a>` : s.name}` +
     `<span class="st${s.ok ? '' : ' fail'}">${s.ok ? `已聚合 ${s.lines_used} 条` : '抓取失败'}</span>` +
-    `<span class="tag"> · ${s.note}</span></div>`).join('');
+    `<span class="tag"> · ${s.note}</span>` +
+    `<div class="srcsub">拉取 ${s.lines_in} 条 · 源站更新：${s.cadence || '—'} · 本站本轮抓取：${s.fetched_at || '—'}</div></div>`).join('');
   getText('data/top.txt').then(t => renderTop(t.split('\n').map(s => s.trim()).filter(Boolean))).catch(() => {});
   getText('data/domains.txt').then(t => {
     const list = t.split('\n').map(s => s.trim()).filter(Boolean).map(l => {
       const [dom, label] = l.split('#');
       return {dom, label: label || 'svip-s 收集'};
     });
-    DOMAINS = [...CARRIER_DOMAINS, ...list];
+    const carrierDoms = new Set(CARRIER_DOMAINS.map(d => d.dom));
+    DOMAINS = [...CARRIER_DOMAINS, ...list.filter(d => !carrierDoms.has(d.dom))];
     renderDomains();
   }).catch(() => { DOMAINS = [...CARRIER_DOMAINS]; renderDomains(); });
   getText('data/all6.txt').then(t => {
