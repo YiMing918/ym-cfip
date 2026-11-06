@@ -111,7 +111,7 @@ export async function onRequest(context) {
   const carrierSet = new Set(carrier.split(",").map(x => x.trim()).filter(Boolean));
   const mode = q.get("mode") || "";
   const fmtRaw = q.get("fmt");
-  const fmt = fmtRaw === null ? null : fmtRaw.slice(0, 120).replace(/[\r\n]/g, "");
+  const fmt = fmtRaw === null ? null : fmtRaw.slice(0, 300).replace(/[\r\n]/g, "");
 
   try {
     if (q.get("stack") === "6") {
