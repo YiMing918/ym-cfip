@@ -43,3 +43,8 @@
 [2803:f800:56::4071:821c]:443#IPv643 [vvHan·电信]
 [2606:4700:4405::1f48:b373]:443#IPv644 [vvHan·电信]
 [2606:4700:5b::5cfe:ba4c]:443#IPv645 [vvHan·电信]
+[2a06:98c3:e9c0:ff67:7447:e246:70e8:8512]:443#IPv646 [NiREvil]
+[2a06:98c6:3aaa:c669:b83:850:fea3:79ea]:443#IPv647 [NiREvil]
+[2c0f:f248:e927:6614:765f:23ea:6c3f:cdf2]:443#IPv648 [NiREvil]
+[2a06:98c6:5be0:ae64:c4b7:54ed:7e4a:c8f5]:443#IPv649 [NiREvil]
+[2405:8100:b3b1:a618:33bc:ea18:5b9f:496]:443#IPv650 [NiREvil]

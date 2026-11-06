@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-11-06 21:31 CST",
+  "generated_at": "2026-11-06 21:40 CST",
   "top": {
     "count": 20,
     "file": "data/top.txt"
   },
-  "total": 922,
-  "v6_total": 45,
+  "total": 1037,
+  "v6_total": 50,
   "domains_total": 36,
   "groups": {
     "best": {
@@ -28,25 +28,26 @@
     },
     "extra": {
       "name": "全国补充",
-      "count": 222,
+      "count": 405,
       "file": "data/extra.txt",
       "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径，非单地区专测"
     },
     "all": {
       "name": "合并总表",
-      "count": 922,
+      "count": 1037,
       "file": "data/all.txt",
       "note": "以上四组合并去重，一份拿全"
     }
   },
   "regions": {
-    "US": 287,
-    "JP": 100,
-    "SG": 63,
-    "HK": 46,
-    "DE": 29,
-    "KR": 27,
-    "NL": 18,
+    "US": 340,
+    "JP": 109,
+    "SG": 72,
+    "HK": 59,
+    "DE": 38,
+    "KR": 37,
+    "NL": 21,
+    "TW": 19,
     "CZ": 11,
     "FI": 11,
     "GB": 11,
@@ -56,7 +57,6 @@
     "RU": 11,
     "IN": 10,
     "AU": 10,
-    "TW": 10,
     "CH": 10,
     "AT": 10,
     "CA": 10,
@@ -197,6 +197,38 @@
       "note": "全国源补充；2 条无地区标注已剔除"
     },
     {
+      "name": "天诚优选",
+      "url": "https://bestcf.tools12345.com/tiancheng/all.txt",
+      "ok": true,
+      "lines_in": 76,
+      "lines_used": 70,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "天诚优选 2",
+      "url": "https://bestcf.tools12345.com/tiancheng2/all.txt",
+      "ok": true,
+      "lines_in": 71,
+      "lines_used": 69,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "vvHan 优选",
+      "url": "https://bestcf.tools12345.com/vvhan/ipv4.txt",
+      "ok": true,
+      "lines_in": 32,
+      "lines_used": 15,
+      "note": "全国源补充；17 条无地区标注已剔除"
+    },
+    {
+      "name": "NiREvil 优选",
+      "url": "https://bestcf.tools12345.com/nirevil/ipv4.txt",
+      "ok": true,
+      "lines_in": 37,
+      "lines_used": 35,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
       "name": "CFYes IPv6",
       "url": "https://bestcf.tools12345.com/cfyes/ipv6.txt",
       "ok": true,
@@ -210,6 +242,14 @@
       "ok": true,
       "lines_in": 32,
       "lines_used": 30,
+      "note": "IPv6 源（半小时更新），源不带地区标注"
+    },
+    {
+      "name": "NiREvil IPv6",
+      "url": "https://bestcf.tools12345.com/nirevil/ipv6.txt",
+      "ok": true,
+      "lines_in": 7,
+      "lines_used": 5,
       "note": "IPv6 源（半小时更新），源不带地区标注"
     },
     {
