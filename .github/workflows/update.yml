@@ -41,5 +41,5 @@ jobs:
           mkdir -p dist/data dist/functions
           cp index.html _headers dist/
           cp -r data/. dist/data/
-          cp functions/sub.js dist/functions/
+          cp -r functions/. dist/functions/
           npx -y wrangler@3 pages deploy dist --project-name ym-cfip --branch main --commit-dirty=true
