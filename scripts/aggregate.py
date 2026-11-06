@@ -82,6 +82,15 @@ SOURCES_LOOSE = [
 CC_WHITELIST = set("""CN HK TW JP KR SG US GB DE FR NL CA AU IN ID TH VN PH MY AE AR OM KW QA SA EG ZA NG KE BR MX CL PE CO NZ CH SE NO DK FI PL ES IT PT IE BE AT CZ GR TR IL RU UA KZ UZ TM KH LA MM BD PK LK NP PA CR DO GT HN SV NI PR GU VI AS MP UM AL AD AG AO AI AQ AT AW AX AZ BA BB BF BG BH BI BJ BL BM BN BO BQ BS BT BV BW BY BZ CC CD CG CI CK CM CV CW CX CY DJ DM DZ EC EE ER ET FJ FK FM FO GA GD GE GF GH GI GL GM GN GP GQ GS GT GW GY HM HR HT HU IM IO IQ IS JE JM JO KG KI KM KN KP KY LB LC LI LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MN MO MQ MR MT MU MV MW MZ NA NC NE NF NU PF PG PM PN PS PW PY RE RO RS RW SB SC SD SH SI SJ SK SL SM SN SO SR SS ST SX SY SZ TC TD TF TG TJ TK TL TO TT TZ UG UY VC VG VU WF WS YE YT ZM ZW""".split())
 # CF 在源文本里是 Cloudflare 的缩写（如 CFnat），不是中非共和国，必须排除
 CC_WHITELIST.discard("CF")
+
+# 中文国名 → 地区代码（源只写国名、不写代码时的兜底识别）
+CN_NAME2CC = {"日本": "JP", "美国": "US", "新加坡": "SG", "香港": "HK", "台湾": "TW",
+              "韩国": "KR", "英国": "GB", "德国": "DE", "法国": "FR", "加拿大": "CA",
+              "澳大利亚": "AU", "荷兰": "NL", "印度": "IN", "越南": "VN", "泰国": "TH",
+              "马来西亚": "MY", "菲律宾": "PH", "印度尼西亚": "ID", "印尼": "ID",
+              "俄罗斯": "RU", "巴西": "BR", "土耳其": "TR", "土库曼斯坦": "TM",
+              "哈萨克斯坦": "KZ", "乌克兰": "UA", "西班牙": "ES", "意大利": "IT",
+              "瑞士": "CH", "瑞典": "SE", "挪威": "NO", "波兰": "PL", "中国": "CN"}
 ZW_RE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
 PRIVATE_RE = re.compile(r"^(127\.|0\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)")
 
@@ -97,6 +106,14 @@ def fetch(urls):
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] fetch failed {url}: {exc}", file=sys.stderr)
     return None, urls[0]
+
+
+def with_twin(url):
+    """BestCF 镜像双主机互为备用：主地址挂了自动换备用域名拉同一份文件。"""
+    urls = [url]
+    if "bestcf.tools12345.com" in url:
+        urls.append(url.replace("bestcf.tools12345.com", "bestcf.pages.dev"))
+    return urls
 
 
 def parse_native(text):
@@ -115,6 +132,9 @@ def extract_cc(tail):
         seg = seg.strip()
         if not seg:
             continue
+        for name, code in CN_NAME2CC.items():
+            if name in seg:
+                return code
         m = re.search(r"[一-鿿]\s*([A-Z]{2})\b", seg)
         if m and m.group(1) in CC_WHITELIST:
             return m.group(1)
@@ -128,7 +148,7 @@ def extract_cc(tail):
 
 
 def parse_loose(text, tag):
-    out, skipped = [], 0
+    out, sw, skipped = [], [], 0
     for raw in text.splitlines():
         line = ZW_RE.sub("", raw.strip())
         m = LOOSE_RE.match(line)
@@ -140,13 +160,139 @@ def parse_loose(text, tag):
             continue
         tail = line[m.end():]
         cc = extract_cc(tail)
-        if not cc:
-            skipped += 1
-            continue
         carrier = CARRIER_RE.search(tail)
+        if not cc:
+            # 破例：无地区、但带运营商实测的条目收进「三网专区」（代号 SW）
+            if carrier:
+                label = tag + f"·{carrier.group(1)}"
+                ms = re.search(r"([\d.]+)\s*ms", tail, re.I)
+                mb = re.search(r"([\d.]+)\s*(?:mb/s|Mbps)", tail, re.I)
+                if ms:
+                    label += f" {ms.group(1)}ms"
+                if mb:
+                    label += f" {mb.group(1)}Mbps"
+                sw.append(f"{ip}:{port}#SW [{label}]")
+            else:
+                skipped += 1
+            continue
         label = tag + (f"·{carrier.group(1)}" if carrier else "")
         out.append(f"{ip}:{port}#{cc} [{label}]")
-    return out, skipped
+    return out, sw, skipped
+
+
+def _classify(ip, port, ctx, tag, out, sw):
+    """按上下文（地区码 / 运营商）把一条 IP:端口 放进地区池或三网专区。
+    测速数字只取本行内的，避免多记录挤页时串到下一条。"""
+    cc = extract_cc(ctx)
+    carrier = CARRIER_RE.search(ctx)
+    first_line = ctx.split("\n", 1)[0]
+    ms = re.search(r"([\d.]+)\s*ms", first_line, re.I)
+    mb = re.search(r"([\d.]+)\s*(?:mb/s|Mbps)", first_line, re.I)
+    met = (f" {ms.group(1)}ms" if ms else "") + (f" {mb.group(1)}Mbps" if mb else "")
+    if cc:
+        label = tag + (f"·{carrier.group(1)}" if carrier else "") + met
+        out.append(f"{ip}:{port}#{cc} [{label}]")
+    elif carrier:
+        sw.append(f"{ip}:{port}#SW [{tag}·{carrier.group(1)}{met}]")
+
+
+IPPORT_SCAN_RE = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3}):(\d{2,5})")
+BAREIP_SCAN_RE = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3})(?![:.\d])")
+PORT_LABEL_RE = re.compile(r"(?:port|端口)[\"']?\s*[:=]\s*(\d{2,5})", re.I)
+
+
+def parse_salvage(text, tag):
+    """兼容扫描：源站改了版式（CSV / JSON / 表格 / 其他文本布局）时的兜底解析。
+    先扫 IP:端口 一体写法；再扫裸 IP（端口从 port 字段 / 紧随数字推断，
+    都没有则默认 443）。标注上下文一律取「该 IP 之后 200 字符」——
+    记录字段通常写在 IP 后面，向后取窗可避免多记录挤一行时串到上一条。"""
+    out, sw, seen = [], [], set()
+    flat = text.replace("\r\n", "\n")
+    starts, pos = [], 0
+    for ln in flat.split("\n"):
+        starts.append(pos)
+        pos += len(ln) + 1
+    lines = flat.split("\n")
+    for i, ln in enumerate(lines):
+        base = starts[i]
+        for m in IPPORT_SCAN_RE.finditer(ln):
+            ip, port = m.group(1), int(m.group(2))
+            if PRIVATE_RE.match(ip) or not (0 < port <= 65535):
+                continue
+            if (ip, port) in seen:
+                continue
+            seen.add((ip, port))
+            _classify(ip, port, flat[base + m.start(): base + m.start() + 200],
+                      tag, out, sw)
+        for m in BAREIP_SCAN_RE.finditer(ln):
+            ip = m.group(1)
+            if PRIVATE_RE.match(ip):
+                continue
+            after = flat[base + m.start(): base + m.start() + 200]
+            pm = PORT_LABEL_RE.search(after)
+            if pm:
+                port = int(pm.group(1))
+            else:
+                nm = re.search(r"[,\s](\d{2,5})(?=[,\s]|$)", ln[m.end():])
+                port = int(nm.group(1)) if nm else 443
+            if not (0 < port <= 65535) or (ip, port) in seen:
+                continue
+            seen.add((ip, port))
+            _classify(ip, port, after, tag, out, sw)
+    return out, sw
+
+
+def parse_uri_list(text, tag):
+    """分享链接格式（vmess / vless / trojan）兜底：取 host:port 与备注解析。"""
+    import base64 as _b64
+    import json as _json
+    out, sw = [], []
+    for raw in text.splitlines():
+        line = raw.strip()
+        host = port = remark = None
+        try:
+            if line.startswith("vmess://"):
+                obj = _json.loads(_b64.b64decode(line[8:] + "==").decode("utf-8", "replace"))
+                host, port, remark = obj.get("add"), obj.get("port"), obj.get("ps", "")
+            elif line.startswith(("vless://", "trojan://")):
+                rest = line.split("://", 1)[1]
+                remark = rest.rsplit("#", 1)[1] if "#" in rest else ""
+                hp = rest.split("@", 1)[-1].split("?")[0].split("#")[0]
+                host, _, port = hp.rpartition(":")
+        except Exception:  # noqa: BLE001
+            continue
+        if host and port and re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", str(host)):
+            if PRIVATE_RE.match(str(host)) or not (0 < int(port) <= 65535):
+                continue
+            _classify(str(host), int(port), str(remark), tag, out, sw)
+    return out, sw
+
+
+def parse_loose_any(text, tag):
+    """格式自适应：标准 → Base64 解码 → 分享链接 → 兼容扫描，首个有产出的胜出。
+    返回 (地区条目, 专区条目, 跳过数, 适配方式)。源站改格式时自动跟上，备注里标明。"""
+    import base64 as _b64
+    lines, sw, skipped = parse_loose(text, tag)
+    if lines or sw:
+        return lines, sw, skipped, "标准"
+    compact = re.sub(r"\s+", "", text)
+    if len(compact) > 40 and re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
+        try:
+            decoded = _b64.b64decode(compact + "==", validate=False).decode("utf-8", "replace")
+            lines, sw, skipped = parse_loose(decoded, tag)
+            if not lines and not sw:
+                lines, sw = parse_uri_list(decoded, tag)
+            if lines or sw:
+                return lines, sw, skipped, "Base64 解码"
+        except Exception:  # noqa: BLE001
+            pass
+    lines, sw = parse_uri_list(text, tag)
+    if lines or sw:
+        return lines, sw, 0, "分享链接解析"
+    lines, sw = parse_salvage(text, tag)
+    if lines or sw:
+        return lines, sw, 0, "兼容扫描"
+    return [], [], skipped, "标准"
 
 
 def number_lines(lines):
@@ -299,30 +445,41 @@ def main():
                          "lines_in": len(usjp), "lines_used": len(usjp),
                          "note": "2026-11-03 多源交叉整理，JP 86 + US 264"})
 
-    extra_all = []
+    extra_all, sw_all = [], []
     for src in SOURCES_LOOSE:
-        text, used_url = fetch(src["url"])
+        text, used_url = fetch(with_twin(src["url"]))
         if text is None:
             meta_sources.append({"name": src["name"], "url": src["url"],
                                  "ok": False, "lines_in": 0, "lines_used": 0,
                                  "note": "抓取失败，保留上次数据外本次跳过"})
             continue
-        lines, skipped = parse_loose(text, src["tag"])
+        lines, sw_lines, skipped, pmode = parse_loose_any(text, src["tag"])
         extra_all.extend(lines)
-        if not lines:
+        sw_all.extend(sw_lines)
+        if not lines and not sw_lines:
             note = ("源内容异常（混入网页代码），本轮自动跳过"
                     if ("<!DOCTYPE" in text or "<html" in text.lower())
-                    else "源当前格式无地区标注，按本站规则（无地区不收）本轮未收录")
+                    else "源格式无法识别（可能改版），本轮未收录，已自动尝试 Base64 / 分享链接 / 兼容扫描")
         else:
             note = f"全国源补充；{skipped} 条无地区标注已剔除"
+            if sw_lines:
+                note += f"；另 {len(sw_lines)} 条无地区但带运营商实测，收进三网专区"
+            if pmode != "标准":
+                note += f"；源格式已变化，本站以「{pmode}」兼容解析自动适配"
+            elif "<!DOCTYPE" in text or "<html" in text.lower():
+                note += "；源文件另混有网页代码，相关行已剔除"
         meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
                              "lines_in": len(text.splitlines()),
-                             "lines_used": len(lines),
+                             "lines_used": len(lines) + len(sw_lines),
                              "note": note})
     groups["extra"] = dedupe(extra_all)
 
     merged = dedupe(groups["best"] + groups["usjp"] + groups["extra"] + groups["full"])
-    groups["all"] = merged
+    # 三网专区：与总池同地址的以地区版为准，这里只收总池没有的
+    merged_addrs = {LOOSE_RE.match(l).group(0) for l in merged if LOOSE_RE.match(l)}
+    groups["sw"] = [l for l in dedupe(sw_all)
+                    if not LOOSE_RE.match(l) or LOOSE_RE.match(l).group(0) not in merged_addrs]
+    groups["all"] = merged + groups["sw"]
 
     # 今日推荐：高速优选前 20（源内按测速排名）
     top_lines = groups["best"][:20]
@@ -333,7 +490,8 @@ def main():
         "usjp": ("美日精选", "静态整理：日本 86 + 美国 264（2026-11-03 多源交叉汇编）"),
         "full": ("全部可用", "实测源全量池，条数多，自己再筛"),
         "extra": ("全国补充", "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径，非单地区专测"),
-        "all": ("合并总表", "以上四组合并去重，一份拿全"),
+        "sw": ("三网专区", "无地区标注、但带运营商实测的条目（CFYes / 麒麟 / vvHan 等），破例收录：只有运营商口径、没有地区"),
+        "all": ("合并总表", "以上各组合并去重，一份拿全"),
     }
     meta_groups = {}
     for key, lines in groups.items():
@@ -343,7 +501,7 @@ def main():
                             "file": f"data/{key}.txt", "note": note}
 
     regions = {}
-    for line in merged:
+    for line in groups["all"]:
         m = re.search(r"#([A-Z]{2})\b", line)
         if m:
             regions[m.group(1)] = regions.get(m.group(1), 0) + 1
@@ -352,7 +510,7 @@ def main():
     # IPv6 池（源不带地区标注，单独成池）
     v6_all = []
     for src in V6_SOURCES:
-        text, used_url = fetch(src["url"])
+        text, used_url = fetch(with_twin(src["url"]))
         if text is None:
             meta_sources.append({"name": src["name"], "url": src["url"],
                                  "ok": False, "lines_in": 0, "lines_used": 0,
@@ -370,7 +528,7 @@ def main():
     # 优选域名（多源聚合：合并去重 + DNS 解析筛除失效域名）
     dom_map = {}
     for src in DOMAIN_SOURCES:
-        text, used_url = fetch(src["url"])
+        text, used_url = fetch(with_twin(src["url"]))
         if text is None:
             meta_sources.append({"name": src["name"], "url": src["url"], "ok": False,
                                  "lines_in": 0, "lines_used": 0,
@@ -410,8 +568,9 @@ def main():
             history = json.loads(hist_file.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             history = []
-    history.insert(0, {"at": generated_at, "total": len(merged),
-                       "v6": len(v6_all), "regions": len(regions),
+    history.insert(0, {"at": generated_at, "total": len(groups["all"]),
+                       "v6": len(v6_all),
+                       "regions": len([k for k in regions if k != "SW"]),
                        "domains": len(domains)})
     hist_file.write_text(json.dumps(history[:30], ensure_ascii=False, indent=1),
                          encoding="utf-8")
@@ -419,7 +578,7 @@ def main():
     meta = {
         "generated_at": generated_at,
         "top": {"count": len(top_lines), "file": "data/top.txt"},
-        "total": len(merged),
+        "total": len(groups["all"]),
         "v6_total": len(v6_all),
         "domains_total": len(domains),
         "domains_screened": screened,
