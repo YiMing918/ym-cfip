@@ -735,37 +735,60 @@ $('btnRecheck').addEventListener('click', async () => {
   window.open(url, '_blank');
 });
 $('vbarClose').addEventListener('click', () => { $('visitorbar').style.display = 'none'; });
+function renderVisitor(region, city, isp){
+  let carrier = '';
+  if(/移动|Mobile/i.test(isp)) carrier = '移动';
+  else if(/电信|Telecom/i.test(isp)) carrier = '电信';
+  else if(/联通|Unicom/i.test(isp)) carrier = '联通';
+  else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
+  const near = /陕西|Shaanxi/i.test(region);
+  $('vbarText').innerHTML = `📍 你的出口：<b>${region} ${city}</b>${isp ? ` · <b>${isp}</b>` : ''} — ` +
+    (near ? '与主力实测源（陕西移动）同省，页面标注数据对你参考价值高。'
+          : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
+  if(carrier){
+    const b = $('vbarBtn');
+    b.style.display = '';
+    b.textContent = `按我的运营商（${carrier}）筛选`;
+    b.addEventListener('click', () => {
+      carrierSel = carrier;
+      document.querySelectorAll('.carrier').forEach(x => x.classList.toggle('on', x.dataset.carrier === carrier));
+      renderChips(); updateSelInfo();
+      toast(`已按 ${carrier} 筛选`);
+    });
+  }
+  $('visitorbar').style.display = '';
+}
 async function detectVisitor(){
-  try{
-    const tr = await (await fetch('https://cloudflare.com/cdn-cgi/trace', {cache: 'no-store'})).text();
-    const ip = (tr.match(/ip=(\S+)/) || [])[1];
-    if(!ip) return;
-    const j = await (await fetch('https://ipwho.is/' + encodeURIComponent(ip))).json();
-    if(!j || !j.success) return;
-    const region = j.region || '', city = j.city || '';
-    const isp = (j.connection && (j.connection.isp || j.connection.org)) || '';
-    let carrier = '';
-    if(/移动|Mobile/i.test(isp)) carrier = '移动';
-    else if(/电信|Telecom/i.test(isp)) carrier = '电信';
-    else if(/联通|Unicom/i.test(isp)) carrier = '联通';
-    else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
-    const near = /陕西|Shaanxi/i.test(region);
-    $('vbarText').innerHTML = `📍 你的出口：<b>${region} ${city}</b> · <b>${isp || '未知运营商'}</b> — ` +
-      (near ? '与主力实测源（陕西移动）同省，页面标注数据对你参考价值高。'
-            : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
-    if(carrier){
-      const b = $('vbarBtn');
-      b.style.display = '';
-      b.textContent = `按我的运营商（${carrier}）筛选`;
-      b.addEventListener('click', () => {
-        carrierSel = carrier;
-        document.querySelectorAll('.carrier').forEach(x => x.classList.toggle('on', x.dataset.carrier === carrier));
-        renderChips(); updateSelInfo();
-        toast(`已按 ${carrier} 筛选`);
-      });
-    }
-    $('visitorbar').style.display = '';
-  }catch(e){ /* 识别不了就静默不显示 */ }
+  // 三路兜底：任一路拿到属地就显示，全失败才静默（某些浏览器会拦单个接口）
+  const tries = [
+    async () => {
+      const j = await (await fetch('https://ipwho.is/', {cache: 'no-store'})).json();
+      if(!j || j.success === false) throw 0;
+      return {region: j.region || j.country || '', city: j.city || '',
+              isp: (j.connection && (j.connection.isp || j.connection.org)) || ''};
+    },
+    async () => {
+      const j = await (await fetch('https://free.freeipapi.com/api/json')).json();
+      if(!j || (!j.regionName && !j.countryName)) throw 0;
+      return {region: j.regionName || j.countryName || '', city: j.cityName || '',
+              isp: j.asnOrganization || ''};
+    },
+    async () => {
+      const tr = await (await fetch('https://cloudflare.com/cdn-cgi/trace', {cache: 'no-store'})).text();
+      const ip = (tr.match(/ip=(\S+)/) || [])[1];
+      if(!ip) throw 0;
+      const j = await (await fetch('https://api.ipapi.is/?ip=' + encodeURIComponent(ip))).json();
+      const loc = (j && j.location) || {}, asn = (j && j.asn) || {};
+      if(!loc.state && !loc.country) throw 0;
+      return {region: loc.state || loc.country || '', city: loc.city || '', isp: asn.org || ''};
+    },
+  ];
+  for(const fn of tries){
+    try{
+      const v = await fn();
+      if(v.region || v.city){ renderVisitor(v.region, v.city, v.isp); return; }
+    }catch(e){ /* 换下一路 */ }
+  }
 }
 $('q').addEventListener('input', renderTable);
 $('btnSubCopy').addEventListener('click', () => copyText($('subUrl').value, '已复制订阅链接'));
