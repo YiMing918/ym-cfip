@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-06 21:19 CST",
+  "generated_at": "2026-11-06 21:25 CST",
   "top": {
     "count": 20,
     "file": "data/top.txt"
@@ -12,13 +12,13 @@
       "name": "高速优选",
       "count": 30,
       "file": "data/best.txt",
-      "note": "陕西移动实测里下载最快的一批，条数少、质量优先"
+      "note": "实测源里下载最快的一批，条数少、质量优先"
     },
     "full": {
       "name": "全部可用",
       "count": 414,
       "file": "data/full.txt",
-      "note": "陕西移动实测全量池，条数多，自己再筛"
+      "note": "实测源全量池，条数多，自己再筛"
     },
     "usjp": {
       "name": "美日精选",
@@ -30,7 +30,7 @@
       "name": "全国补充",
       "count": 222,
       "file": "data/extra.txt",
-      "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径非陕西专测"
+      "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径，非单地区专测"
     },
     "all": {
       "name": "合并总表",
@@ -109,15 +109,15 @@
   },
   "sources": [
     {
-      "name": "陕西移动实测 · 高速优选",
+      "name": "实测源 · 高速优选",
       "url": "https://ips.gaoji.uk/best_ips.txt",
       "ok": true,
       "lines_in": 30,
       "lines_used": 30,
-      "note": "svip-s/cloudflare_ip，测试地陕西移动，源站整点更新"
+      "note": "svip-s/cloudflare_ip，单地区运营商网络实测，源站整点更新"
     },
     {
-      "name": "陕西移动实测 · 全部可用",
+      "name": "实测源 · 全部可用",
       "url": "https://ips.gaoji.uk/full_ips.txt",
       "ok": true,
       "lines_in": 419,
