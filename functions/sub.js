@@ -4,7 +4,7 @@
 //   n=20               每地区最多 N 个
 //   rn=JP.10,US.5      单独定每地区个数（覆盖 n）
 //   ms=200             最大延迟（源标注）  mbps=10  最低速度（源标注）
-//   carrier=移动       运营商（带标注的只留对应；无标注源保留）
+//   carrier=移动,电信  运营商可多选逗号分隔（带标注的只留所选；无标注源保留）
 //   ports=tls          端口：all（缺省）| 443 | tls(443/8443/2053/2083/2087/2096)
 //   mode=random        随机抽取（缺省质量优先源序）
 //   stack=6            IPv6 池（此时 regions/ms/mbps 不适用，可用 n/carrier）
@@ -42,7 +42,7 @@ function srcName(tag) {
 }
 // fmt 模板（页面「导出格式」经订阅参数传入）：变量 {地区}{代码}{序号}{延迟}{网速}{运营商}{标签}{旗帜}
 function applyFmt(lines, fmt) {
-  if (!fmt) return renumber(lines);
+  if (fmt === null) return renumber(lines);
   const cnt = {};
   return lines.map(l => {
     const p = parseAnySub(l);
@@ -108,13 +108,15 @@ export async function onRequest(context) {
 
   const nAll = parseInt(q.get("n") || "", 10);
   const carrier = q.get("carrier") || "";
+  const carrierSet = new Set(carrier.split(",").map(x => x.trim()).filter(Boolean));
   const mode = q.get("mode") || "";
-  const fmt = (q.get("fmt") || "").slice(0, 120).replace(/[\r\n]/g, "");
+  const fmtRaw = q.get("fmt");
+  const fmt = fmtRaw === null ? null : fmtRaw.slice(0, 120).replace(/[\r\n]/g, "");
 
   try {
     if (q.get("stack") === "6") {
       let pool = await loadPool(context, url.origin, "/data/all6.txt");
-      if (carrier) pool = pool.filter(l => !l.includes("·") || l.includes("·" + carrier));
+      if (carrierSet.size) pool = pool.filter(l => { const m = l.match(/·(移动|电信|联通|广电)/); return !m || carrierSet.has(m[1]); });
       if (mode === "random") pool = shuffle(pool);
       const out = isNaN(nAll) ? pool : pool.slice(0, nAll);
       return new Response(applyFmt(out, fmt).join("\n") + "\n", { headers });
@@ -139,7 +141,7 @@ export async function onRequest(context) {
       if (!p || !regions.has(p.region)) continue;
       if (!isNaN(maxMs) && (p.srcMs === null || p.srcMs > maxMs)) continue;
       if (!isNaN(minMbps) && (p.srcMbps === null || p.srcMbps < minMbps)) continue;
-      if (carrier && p.carrier && p.carrier !== carrier) continue;
+      if (carrierSet.size && p.carrier && !carrierSet.has(p.carrier)) continue;
       if (ports === "443" && p.port !== "443") continue;
       if (ports === "tls" && !TLS_PORTS.has(p.port)) continue;
       (byRegion[p.region] = byRegion[p.region] || []).push(p.line);
