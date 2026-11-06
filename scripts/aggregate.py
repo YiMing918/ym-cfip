@@ -67,6 +67,14 @@ SOURCES_LOOSE = [
      "url": "https://bestcf.tools12345.com/luoli/all.txt"},
     {"name": "Mia 优选", "tag": "Mia优选",
      "url": "https://bestcf.tools12345.com/xinyitang3/ipv4.txt"},
+    {"name": "天诚优选", "tag": "天诚优选",
+     "url": "https://bestcf.tools12345.com/tiancheng/all.txt"},
+    {"name": "天诚优选 2", "tag": "天诚优选",
+     "url": "https://bestcf.tools12345.com/tiancheng2/all.txt"},
+    {"name": "vvHan 优选", "tag": "vvHan",
+     "url": "https://bestcf.tools12345.com/vvhan/ipv4.txt"},
+    {"name": "NiREvil 优选", "tag": "NiREvil",
+     "url": "https://bestcf.tools12345.com/nirevil/ipv4.txt"},
 ]
 
 CC_WHITELIST = set("""CN HK TW JP KR SG US GB DE FR NL CA AU IN ID TH VN PH MY AE AR OM KW QA SA EG ZA NG KE BR MX CL PE CO NZ CH SE NO DK FI PL ES IT PT IE BE AT CZ GR TR IL RU UA KZ UZ TM KH LA MM BD PK LK NP PA CR DO GT HN SV NI PR GU VI AS MP UM AL AD AG AO AI AQ AT AW AX AZ BA BB BF BG BH BI BJ BL BM BN BO BQ BS BT BV BW BY BZ CC CD CG CI CK CM CV CW CX CY DJ DM DZ EC EE ER ET FJ FK FM FO GA GD GE GF GH GI GL GM GN GP GQ GS GT GW GY HM HR HT HU IM IO IQ IS JE JM JO KG KI KM KN KP KY LB LC LI LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MN MO MQ MR MT MU MV MW MZ NA NC NE NF NU PF PG PM PN PS PW PY RE RO RS RW SB SC SD SH SI SJ SK SL SM SN SO SR SS ST SX SY SZ TC TD TF TG TJ TK TL TO TT TZ UG UY VC VG VU WF WS YE YT ZM ZW""".split())
@@ -173,6 +181,8 @@ V6_SOURCES = [
      "url": "https://bestcf.tools12345.com/cfyes/ipv6.txt"},
     {"name": "vvHan IPv6", "tag": "vvHan",
      "url": "https://bestcf.tools12345.com/vvhan/ipv6.txt"},
+    {"name": "NiREvil IPv6", "tag": "NiREvil",
+     "url": "https://bestcf.tools12345.com/nirevil/ipv6.txt"},
 ]
 V6_RE = re.compile(r"\[([0-9a-fA-F:]+)\]:(\d+)")
 DOMAIN_URLS = ["https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt"]
