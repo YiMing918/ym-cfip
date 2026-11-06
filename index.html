@@ -195,6 +195,10 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn" id="btnTest">⚡ 本地测速（双测取低）</button>
     <button class="btn" id="btnSort" disabled>按延迟排序</button>
     <button class="btn" id="btnRecheck">送复检站</button>
+    <label style="margin-left:6px">列表/导出顺序 <select id="ordMode">
+      <option value="region" selected>按地区分组（日本全完→美国…）</option>
+      <option value="asis">按当前顺序</option>
+    </select></label>
   </div>
   <div class="ctrl" style="margin-top:8px">
     <label>复检站点 <select id="recheckSel">
@@ -206,7 +210,8 @@ footer a{color:var(--acc2);text-decoration:none}
     <span class="selinfo">「送复检站」= 复制当前清单并打开所选站点，在那边逐个核对归属与纯净度；选择会记在你浏览器里。</span>
   </div>
   <div class="ctrl" style="margin-top:8px">
-    <label>导出格式 <input id="fmtInput" type="text" style="min-width:240px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 12px;font-size:13.5px;font-family:ui-monospace,Menlo,Consolas,monospace"></label>
+    <label>导出格式 <input id="fmtInput" type="text" readonly style="min-width:240px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 12px;font-size:13.5px;font-family:ui-monospace,Menlo,Consolas,monospace"></label>
+    <button class="btn" id="fmtEdit" type="button">✎ 手动编辑</button>
     <span class="selinfo">变量：{地区} {代码} {序号} {延迟} {网速} {运营商} {来源} {端口} {日期} {标签} {旗帜} — 想加啥加啥，套用到复制 / 下载 / 订阅链接，记在你浏览器里</span>
   </div>
   <div class="ctrl" id="fmtPresets" style="margin-top:6px">
@@ -219,7 +224,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <span class="selinfo" id="fmtPreview"></span>
   </div>
   <div class="ctrl" id="fmtVars" style="margin-top:6px">
-    <span class="selinfo">点变量往格式里加：</span>
+    <span class="selinfo">点变量开关（亮着 = 已用上，再点取消）：</span>
     <button class="btn" data-tok="{地区}">地区</button>
     <button class="btn" data-tok="{代码}">代码</button>
     <button class="btn" data-tok="{序号}">序号</button>
@@ -231,6 +236,9 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn" data-tok="{日期}">日期</button>
     <button class="btn" data-tok="{标签}">标签</button>
     <button class="btn" data-tok="{旗帜}">旗帜</button>
+    <button class="btn" data-sep="-">分隔 -</button>
+    <button class="btn" data-sep="·">分隔 ·</button>
+    <button class="btn" data-sep=" ">空格</button>
     <button class="btn" id="fmtClear">清空</button>
   </div>
   <div class="tblwrap scrollbox" style="max-height:52vh"><table>
@@ -442,7 +450,16 @@ function renderRemark(tpl, p, seq){
     .replaceAll('{旗帜}', flagEmoji(p.region));
   return r.replace(/\[\s*\]/g, '').replace(/\s+/g, ' ').trim();
 }
+function groupByRegion(lines){
+  const groups = {};
+  lines.forEach(l => { const r = parseAny(l).region; (groups[r] = groups[r] || []).push(l); });
+  return Object.keys(groups).sort().flatMap(r => groups[r]);
+}
+function orderedResult(){
+  return ($('ordMode') && $('ordMode').value === 'region') ? groupByRegion(RESULT) : RESULT;
+}
 function formatLines(lines){
+  if($('ordMode') && $('ordMode').value === 'region') lines = groupByRegion(lines);
   const cnt = {};
   return lines.map(l => {
     const p = parseAny(l);
@@ -456,26 +473,38 @@ function bigRemark(seq, localMs){
   return (!r || /^\d+$/.test(r)) ? `优选${seq}` : r;
 }
 function fmtPreviewUpdate(){
-  const sample = { addr: '13.196.179.169:443', region: 'JP', tag: '优选高速 82.13ms 16.72Mbps', carrier: '', srcMs: 82.13, srcMbps: 16.72 };
-  const r = renderRemark(FMT, sample, 1);
-  $('fmtPreview').textContent = `预览：${sample.addr}#${r}`;
+  const jp = { addr: '13.196.179.169:443', region: 'JP', tag: '优选高速 82.13ms 16.72Mbps', carrier: '', srcMs: 82.13, srcMbps: 16.72 };
+  const us = { addr: '104.17.53.195:443', region: 'US', tag: '反代入口', carrier: '', srcMs: null, srcMbps: null };
+  $('fmtPreview').textContent = `预览：${jp.addr}#${renderRemark(FMT, jp, 1)} ｜ ${jp.addr}#${renderRemark(FMT, jp, 2)} ｜ ${us.addr}#${renderRemark(FMT, us, 1)}（序号按地区各自从 1 数）`;
+}
+function syncFmtChips(){
+  document.querySelectorAll('#fmtVars [data-tok]').forEach(b =>
+    b.classList.toggle('primary', FMT.includes(b.dataset.tok)));
 }
 $('fmtInput').value = FMT;
 $('fmtInput').addEventListener('input', e => {
   FMT = e.target.value;
   try{ localStorage.setItem('cfipFmt', FMT); }catch(err){}
-  fmtPreviewUpdate(); refreshSub();
+  fmtPreviewUpdate(); refreshSub(); syncFmtChips();
 });
 document.querySelectorAll('#fmtPresets button').forEach(b =>
   b.addEventListener('click', () => { $('fmtInput').value = b.dataset.fmt; $('fmtInput').dispatchEvent(new Event('input')); }));
 document.querySelectorAll('#fmtVars [data-tok]').forEach(b => b.addEventListener('click', () => {
   const inp = $('fmtInput'), t = b.dataset.tok;
-  const st = inp.selectionStart !== null && inp.selectionStart !== undefined ? inp.selectionStart : inp.value.length;
-  const en = inp.selectionEnd !== null && inp.selectionEnd !== undefined ? inp.selectionEnd : inp.value.length;
-  inp.value = inp.value.slice(0, st) + t + inp.value.slice(en);
+  inp.value = FMT.includes(t) ? FMT.split(t).join('') : FMT + t;
   inp.dispatchEvent(new Event('input'));
-  inp.focus(); try{ inp.setSelectionRange(st + t.length, st + t.length); }catch(e){}
 }));
+document.querySelectorAll('#fmtVars [data-sep]').forEach(b => b.addEventListener('click', () => {
+  const inp = $('fmtInput');
+  inp.value = FMT + b.dataset.sep;
+  inp.dispatchEvent(new Event('input'));
+}));
+$('fmtEdit').addEventListener('click', () => {
+  const inp = $('fmtInput');
+  if(inp.readOnly){ inp.readOnly = false; $('fmtEdit').textContent = '✔ 编辑中（点此锁定）'; inp.focus(); }
+  else { inp.readOnly = true; $('fmtEdit').textContent = '✎ 手动编辑'; }
+});
+syncFmtChips();
 $('fmtClear').addEventListener('click', () => { $('fmtInput').value = ''; $('fmtInput').dispatchEvent(new Event('input')); });
 fmtPreviewUpdate();
 function effMs(p){
@@ -563,8 +592,24 @@ function renderChips(){
     (carrierSet.has('广电') && cc2['广电'] === 0 ? '<br>⚠️ 全网暂无广电实测源：当前清单为通用条目，请用「检测本地可用」在广电网络上实测筛选。' : '');
 }
 function updateSelInfo(){
-  $('selinfo').innerHTML = `已选 <b>${selected.size}</b> 个地区 · 将生成 <b>${buildList().length}</b> 条`;
+  const final = buildList().length;
+  let extra = '';
+  if(selected.size){
+    const sel = POOL.filter(l => selected.has(parseLine(l).region));
+    const cDrop = carrierSet.size
+      ? sel.filter(l => { const p = parseLine(l); return p.carrier && !carrierSet.has(p.carrier); }).length : 0;
+    if(cDrop) extra += `（运营商筛选滤掉 ${cDrop} 条）`;
+    const rest = sel.length - cDrop - final;
+    if(rest > 0) extra += `（另 ${rest} 条被${$('onlyAvail').checked ? '「只生成测通的」' : '每地区数量/门槛/端口'}滤掉）`;
+  }
+  $('selinfo').innerHTML = `已选 <b>${selected.size}</b> 个地区 · 将生成 <b>${final}</b> 条${extra}`;
   refreshSub(); saveCfg();
+}
+function regionStatText(lines){
+  const by = {};
+  lines.forEach(l => { const p = parseLine(l); const o = by[p.region] = by[p.region] || { n: 0, ok: 0 };
+    o.n++; if(lat[p.addr] !== undefined && lat[p.addr] >= 0) o.ok++; });
+  return Object.keys(by).sort().map(cc => `${NAMES[cc] || cc} 共 ${by[cc].n} 条 · 通 ${by[cc].ok}`).join(' ｜ ');
 }
 function generate(){
   RESULT = buildList();
@@ -575,7 +620,7 @@ function generate(){
 }
 function renderTable(){
   const q = $('q').value.trim().toLowerCase();
-  const lines = RESULT.filter(l => !q || l.toLowerCase().includes(q));
+  const lines = orderedResult().filter(l => !q || l.toLowerCase().includes(q));
   $('rescount').textContent = `（共 ${RESULT.length} 条${q ? `，过滤后 ${lines.length} 条` : ''}）`;
   $('rows').innerHTML = lines.map((l, i) => {
     const p = parseLine(l);
@@ -637,9 +682,9 @@ async function scanPool(scope){
   await Promise.all(Array.from({length: 12}, worker));
   refreshAvail();
   const nRegionsOk = Object.values(availByRegion || {}).filter(v => v > 0).length;
-  $('scaninfo').innerHTML = scanning
+  $('scaninfo').innerHTML = (scanning
     ? `检测完成：<b>${okN}</b>/${total} 可用，分布在 <b>${nRegionsOk}</b> 个地区（地区钮上的 ✓ 是该地区可用数）`
-    : `已停止：测了 ${doneN}/${total}，可用 <b>${okN}</b> 个`;
+    : `已停止：测了 ${doneN}/${total}，可用 <b>${okN}</b> 个`) + `<br>${regionStatText(lines)}`;
   $('btnSelAvail').disabled = nRegionsOk === 0;
   scanning = false;
   $('btnScan').disabled = false; $('btnScanSel').disabled = false;
@@ -675,7 +720,8 @@ async function runTest(){
   }
   await Promise.all(Array.from({length: 8}, worker));
   $('testnote').textContent = `本地测速完成（共 ${total} 条，双测取低，浏览器握手计时，仅作相对比较）` +
-    (RESULT.length > total ? `；清单共 ${RESULT.length} 条，仅测前 ${total} 条` : '');
+    (RESULT.length > total ? `；清单共 ${RESULT.length} 条，仅测前 ${total} 条` : '') +
+    `；${regionStatText(RESULT)}`;
   $('btnSort').disabled = false;
   btn.disabled = false;
   renderTable();
@@ -920,8 +966,10 @@ $('btnSort').addEventListener('click', () => {
     const va = lat[parseLine(a).addr], vb = lat[parseLine(b).addr];
     return (va === undefined || va === -1 ? 1e9 : va) - (vb === undefined || vb === -1 ? 1e9 : vb);
   });
+  if($('ordMode')) $('ordMode').value = 'asis';
   renderTable(); toast('已按本地延迟排序');
 });
+$('ordMode').addEventListener('change', () => { if(RESULT.length) renderTable(); });
 // ===== ⑦ 大池采样（官方段随机，未实测）=====
 const CF_SEG = ['173.245.48.0/20','103.21.244.0/22','103.22.200.0/22','103.31.4.0/22','141.101.64.0/18','108.162.192.0/18','190.93.240.0/20','188.114.96.0/20','197.234.240.0/22','198.41.128.0/17','162.158.0.0/15','104.16.0.0/13','104.24.0.0/14','172.64.0.0/13','131.0.72.0/22']
   .map(s => { const [ip, bits] = s.split('/'); return { base: ip.split('.').reduce((a, o) => a * 256 + (+o), 0), size: Math.pow(2, 32 - (+bits)) }; });
