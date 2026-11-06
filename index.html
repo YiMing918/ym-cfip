@@ -242,11 +242,28 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card">
   <h3>④ 我的订阅链接（自动更新）</h3>
-  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、进不了订阅；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。</div>
+  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。</div>
   <div class="ctrl">
     <input id="subUrl" readonly>
     <button class="btn primary" id="btnSubCopy">复制订阅链接</button>
     <button class="btn" id="btnShare">复制分享链接</button>
+  </div>
+  <div class="ctrl">
+    <label>快照范围 <select id="snapScope">
+      <option value="ok" selected>只含本地测通的（推荐）</option>
+      <option value="ms">只含本地测速 ≤ 阈值</option>
+      <option value="all">当前清单全部</option>
+    </select></label>
+    <label>阈值 ≤ <input id="snapMs" type="number" value="300" min="1" style="width:84px"> ms</label>
+    <span class="selinfo">「测通」以你在本页的检测 / 测速结果为准：超时的、没测的，都不进快照。</span>
+  </div>
+  <div class="ctrl">
+    <button class="btn" id="btnSnap">📌 把当前清单存为快照订阅（本地测通版）</button>
+    <span class="selinfo">把③清单此刻的内容（已含你的本地筛选与导出格式）定格存一份、生成专属链接；客户端拉它就是这一批，不随聚合变化。重新测速后回来再存一次，会生成新链接（快照保留 180 天）。</span>
+  </div>
+  <div class="ctrl" id="snapRow" style="display:none">
+    <input id="snapUrl" readonly>
+    <button class="btn primary" id="btnSnapCopy">复制快照链接</button>
   </div>
   <div class="ctrl">
     <label>建议客户端每 <select id="subUi">
@@ -640,7 +657,7 @@ function refreshAvail(){
   renderChips();
 }
 async function runTest(){
-  const lines = RESULT.slice(0, 120);
+  const lines = RESULT.slice(0, 300);
   if(!lines.length) return;
   const btn = $('btnTest'); btn.disabled = true;
   let doneN = 0, idx = 0;
@@ -792,6 +809,40 @@ function buildSubUrl(stack6){
   return base + '?' + parts.join('&');
 }
 function refreshSub(){ const el = $('subUrl'); if(el) el.value = buildSubUrl(false); }
+function snapScopeLines(){
+  const scope = $('snapScope').value;
+  if(scope === 'all') return RESULT.slice();
+  const cap = scope === 'ms' ? Math.max(1, +$('snapMs').value || 300) : Infinity;
+  return RESULT.filter(l => {
+    const ms = lat[parseLine(l).addr];
+    return ms !== undefined && ms >= 0 && ms <= cap;
+  });
+}
+$('btnSnap').addEventListener('click', async () => {
+  if(!RESULT.length){ toast('先在③生成清单，再存快照'); return; }
+  const scope = $('snapScope').value;
+  const lines = snapScopeLines();
+  if(!lines.length){
+    toast(scope === 'all' ? '清单是空的' : '还没有测通的数据：先在②点「检测本地可用」或在③点「本地测速」，再存快照');
+    return;
+  }
+  $('btnSnap').disabled = true;
+  try{
+    const r = await fetch(new URL('save', location.href).href, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: formatLines(lines).join('\n') }),
+    });
+    const j = await r.json().catch(() => null);
+    if(!r.ok || !j || !j.url) throw 0;
+    $('snapUrl').value = j.url;
+    $('snapRow').style.display = '';
+    toast(scope === 'all'
+      ? `已存快照订阅：${lines.length} 条（清单全部）`
+      : `已存快照订阅：${lines.length} 条测通的（清单 ${RESULT.length} 条，超时/未测的已剔除）`);
+  }catch(e){ toast('存快照失败，稍后再试'); }
+  $('btnSnap').disabled = false;
+});
+$('btnSnapCopy').addEventListener('click', () => copyText($('snapUrl').value, '已复制快照订阅链接'));
 function refreshAggNote(){
   const v = $('aggFreq').value;
   localStorage.setItem('cfipAggFreq', v);
