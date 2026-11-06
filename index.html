@@ -735,14 +735,18 @@ $('btnRecheck').addEventListener('click', async () => {
   window.open(url, '_blank');
 });
 $('vbarClose').addEventListener('click', () => { $('visitorbar').style.display = 'none'; });
+const PROV_ZH = {Beijing:'北京',Shanghai:'上海',Tianjin:'天津',Chongqing:'重庆','Inner Mongolia':'内蒙古','Inner Mongolia Autonomous Region':'内蒙古',Xinjiang:'新疆',Tibet:'西藏',Ningxia:'宁夏',Guangxi:'广西','Hong Kong':'香港',Macau:'澳门',Macao:'澳门',Taiwan:'台湾',Shaanxi:'陕西',Sichuan:'四川',Guangdong:'广东',Jiangsu:'江苏',Zhejiang:'浙江',Shandong:'山东',Henan:'河南',Hubei:'湖北',Hunan:'湖南',Hebei:'河北',Shanxi:'山西',Liaoning:'辽宁',Jilin:'吉林',Heilongjiang:'黑龙江',Anhui:'安徽',Fujian:'福建',Jiangxi:'江西',Hainan:'海南',Guizhou:'贵州',Yunnan:'云南',Gansu:'甘肃',Qinghai:'青海'};
 function renderVisitor(region, city, isp){
+  region = PROV_ZH[region] || region;
+  city = PROV_ZH[city] || city;
+  const place = (city && city !== region) ? `${region} ${city}` : region;
   let carrier = '';
   if(/移动|Mobile/i.test(isp)) carrier = '移动';
   else if(/电信|Telecom/i.test(isp)) carrier = '电信';
   else if(/联通|Unicom/i.test(isp)) carrier = '联通';
   else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
   const near = /陕西|Shaanxi/i.test(region);
-  $('vbarText').innerHTML = `📍 你的出口：<b>${region} ${city}</b>${isp ? ` · <b>${isp}</b>` : ''} — ` +
+  $('vbarText').innerHTML = `📍 你的出口：<b>${place}</b>${isp ? ` · <b>${isp}</b>` : ''} — ` +
     (near ? '与主力实测源（陕西移动）同省，页面标注数据对你参考价值高。'
           : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
   if(carrier){
@@ -759,25 +763,32 @@ function renderVisitor(region, city, isp){
   $('visitorbar').style.display = '';
 }
 async function detectVisitor(){
-  // 三路兜底：任一路拿到属地就显示，全失败才静默（某些浏览器会拦单个接口）
+  // 三路兜底：任一路拿到属地就显示，全失败才静默（某些浏览器会拦单个接口）。
+  // 每路单独 6 秒超时：不超时的 fetch 一旦挂住会堵死后面的兜底路，
+  // 这正是旧版单路在个别网络下属地条一直不出现的原因之一。
+  const fetchT = (url, ms) => {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), ms || 6000);
+    return fetch(url, {signal: c.signal, cache: 'no-store'}).finally(() => clearTimeout(t));
+  };
   const tries = [
     async () => {
-      const j = await (await fetch('https://ipwho.is/', {cache: 'no-store'})).json();
+      const j = await (await fetchT('https://ipwho.is/')).json();
       if(!j || j.success === false) throw 0;
       return {region: j.region || j.country || '', city: j.city || '',
               isp: (j.connection && (j.connection.isp || j.connection.org)) || ''};
     },
     async () => {
-      const j = await (await fetch('https://free.freeipapi.com/api/json')).json();
+      const j = await (await fetchT('https://free.freeipapi.com/api/json')).json();
       if(!j || (!j.regionName && !j.countryName)) throw 0;
       return {region: j.regionName || j.countryName || '', city: j.cityName || '',
               isp: j.asnOrganization || ''};
     },
     async () => {
-      const tr = await (await fetch('https://cloudflare.com/cdn-cgi/trace', {cache: 'no-store'})).text();
+      const tr = await (await fetchT('https://cloudflare.com/cdn-cgi/trace')).text();
       const ip = (tr.match(/ip=(\S+)/) || [])[1];
       if(!ip) throw 0;
-      const j = await (await fetch('https://api.ipapi.is/?ip=' + encodeURIComponent(ip))).json();
+      const j = await (await fetchT('https://api.ipapi.is/?ip=' + encodeURIComponent(ip))).json();
       const loc = (j && j.location) || {}, asn = (j && j.asn) || {};
       if(!loc.state && !loc.country) throw 0;
       return {region: loc.state || loc.country || '', city: loc.city || '', isp: asn.org || ''};
