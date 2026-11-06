@@ -129,9 +129,9 @@ footer a{color:var(--acc2);text-decoration:none}
 </nav>
 
 <div class="card">
-  <h3>🏆 今日推荐（实测源 · 高速优选 Top 20）</h3>
+  <h3>🏆 今日推荐（实测源 · 高速优选 Top 20（前 20 名）</h3>
   <div class="toolbar">
-    <button class="btn primary" id="btnTopCopy">复制 Top 20</button>
+    <button class="btn primary" id="btnTopCopy">复制 Top 20（前 20 条）</button>
     <button class="btn" id="btnTopDl">下载文件</button>
     <button class="btn" id="btnTopLink">复制直链</button>
     <span class="selinfo">直链是固定地址，内容随每次聚合自动更新，可直接当订阅源。</span>
@@ -335,7 +335,7 @@ footer a{color:var(--acc2);text-decoration:none}
   <div class="selinfo" id="bigMeta" style="margin-top:2px"></div>
   <div class="ctrl" id="bigRegionRow" style="display:none">
     <label>落地地区 <select id="bigRegion"><option value="">全部地区</option></select></label>
-    <span class="selinfo">检测后按真实落地（trace 读取）筛；读不到的条目归未识别，不在此列。「只复制可用的」与快照的「可用的」都按这里选的地区走。</span>
+    <span class="selinfo">检测后按真实落地（trace 机房信息读取）筛；读不到的条目归未识别，不在此列。「只复制可用的」与快照的「可用的」都按这里选的地区走。</span>
   </div>
   <div class="ctrl">
     <label>存快照 <select id="bigSnapScope"><option value="ok">只存检测可用的</option><option value="all">全部采样</option></select></label>
@@ -376,10 +376,10 @@ footer a{color:var(--acc2);text-decoration:none}
     <b>第二步 · 验</b> — 对清单点「本地可用检测」或「本地测速」：这是在<b>你自己的网络</b>上现场测，通不通、多少毫秒以这个为准；本站数据是各源站在自家测试地测的，只作参考。<br>
     <b>第三步 · 用</b> — 直接复制清单粘进客户端；或在「③ 订阅」里存一份<b>快照</b>，生成你的专属链接，只含你测通的那批，不随聚合变动。<br>
     <b>第四步 · 长效</b> — 想长期自动更新：用「③ 订阅」的实时订阅链接（随本站每轮聚合刷新），或去「直链」拿现成分组文件；想用某家原味的，复制「直链」里各源原始直链，源站自己更新。<br>
-    <b>每个类目干什么</b> — 今日推荐（默认首页）：源站测速 Top 20，现成可用；选 IP：生成与实测清单；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况、更新节奏与抓取时间；说明：本页。
+    <b>每个类目干什么</b> — 今日推荐（默认首页）：源站测速 Top 20（前 20 名），现成可用；选 IP：生成与实测清单；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况、更新节奏与抓取时间；说明：本页。
   </div>
   <div class="note">
-    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 24 个公开优选源拉取清单（18 个 IP 源 + 6 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（换成 Base64、分享链接、JSON、CSV 等）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
+    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 24 个公开优选源拉取清单（18 个 IP 源 + 6 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（比如换成 Base64 编码订阅、分享链接、JSON / CSV 数据文件）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP 被多个源收录只算一次；某个源某轮抓取失败，它独有的条目会临时掉出、下一轮自动恢复。页面顶部「更新于」就是最近一轮的时间。<br>
     <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 握手探测（超时统一 5 秒，对齐主流客户端健康检查的默认口径；证书不匹配 IP 会报错返回，测的是报错前耗时）：有响应 = 你当前网络能连上该 IP:端口，不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
     <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。<br>
@@ -404,6 +404,14 @@ const PRESETS = {
   americas: ['US','CA','BR','MX','CL','AR','DO'],
 };
 const TLS_PORTS = new Set(['443','8443','2053','2083','2087','2096']);
+// 机房代码（机场三字码）→ 中文城市/地区，显示时带上中文，避免只看英文代码
+const COLO_CN = {SIN:'新加坡', HKG:'香港', NRT:'东京', KIX:'大阪', ICN:'首尔', TPE:'台北',
+  LAX:'洛杉矶', SJC:'圣何塞', DFW:'达拉斯', ORD:'芝加哥', IAD:'华盛顿', EWR:'纽瓦克',
+  JFK:'纽约', MIA:'迈阿密', SEA:'西雅图', PDX:'波特兰', DEN:'丹佛', ATL:'亚特兰大',
+  FRA:'法兰克福', LHR:'伦敦', CDG:'巴黎', AMS:'阿姆斯特丹', MAD:'马德里', ZRH:'苏黎世',
+  SYD:'悉尼', MEL:'墨尔本', BNE:'布里斯班', AKL:'奥克兰', BOM:'孟买', DEL:'德里',
+  GRU:'圣保罗', YYZ:'多伦多', YVR:'温哥华', KUL:'吉隆坡', BKK:'曼谷', HAN:'河内', MNL:'马尼拉', CGK:'雅加达'};
+const coloZh = c => c ? (COLO_CN[c] ? `${c} ${COLO_CN[c]}` : c) : '';
 const CARRIER_DOMAINS = [
   {dom:'cf.090227.xyz', label:'社区分流 · 三网自适应'},
   {dom:'cmcc.090227.xyz', label:'社区分流 · 移动'},
@@ -843,7 +851,7 @@ async function testDomains(){
         if(r.ms >= 0){ el.textContent = `${r.ms} ms`; el.className = `lat ${r.ms<200?'good':r.ms<600?'mid':'bad'}`; }
         else { el.textContent = '超时/被拦'; el.className = 'lat bad'; }
       }
-      if(ce && (r.colo || r.ip)) ce.textContent = [r.colo && `机房 ${r.colo}`, r.ip && `落地 ${r.ip}`].filter(Boolean).join(' · ');
+      if(ce && (r.colo || r.ip)) ce.textContent = [r.colo && `机房 ${coloZh(r.colo)}`, r.ip && `落地 ${r.ip}`].filter(Boolean).join(' · ');
       doneN++;
       $('domininfo').textContent = `实测中… ${doneN}/${total} · 可达 ${okN}`;
     }
@@ -858,8 +866,8 @@ async function testDomains(){
     const colos = {};
     ok.forEach(r => { if(r.colo) colos[r.colo] = (colos[r.colo] || 0) + 1; });
     const coloStr = Object.entries(colos).sort((a, b) => b[1] - a[1]).slice(0, 6)
-      .map(([k, v]) => `${k} ${v}`).join(' · ');
-    if(coloStr) summary += `<br>落地机房分布（能读到 trace 的）：${coloStr}`;
+      .map(([k, v]) => `${coloZh(k)} ${v} 个`).join(' · ');
+    if(coloStr) summary += `<br>落地机房分布（能读到机房信息 trace 的）：${coloStr}`;
   }
   $('domininfo').innerHTML = summary;
   btn.disabled = false;
@@ -1298,20 +1306,38 @@ $('btnRecheck').addEventListener('click', async () => {
 });
 $('vbarClose').addEventListener('click', () => { $('visitorbar').style.display = 'none'; });
 const PROV_ZH = {Beijing:'北京',Shanghai:'上海',Tianjin:'天津',Chongqing:'重庆','Inner Mongolia':'内蒙古','Inner Mongolia Autonomous Region':'内蒙古',Xinjiang:'新疆',Tibet:'西藏',Ningxia:'宁夏',Guangxi:'广西','Hong Kong':'香港',Macau:'澳门',Macao:'澳门',Taiwan:'台湾',Shaanxi:'陕西',Sichuan:'四川',Guangdong:'广东',Jiangsu:'江苏',Zhejiang:'浙江',Shandong:'山东',Henan:'河南',Hubei:'湖北',Hunan:'湖南',Hebei:'河北',Shanxi:'山西',Liaoning:'辽宁',Jilin:'吉林',Heilongjiang:'黑龙江',Anhui:'安徽',Fujian:'福建',Jiangxi:'江西',Hainan:'海南',Guizhou:'贵州',Yunnan:'云南',Gansu:'甘肃',Qinghai:'青海'};
-function renderVisitor(region, city, isp){
+const CITY_ZH = {Nanjing:'南京', Shenzhen:'深圳', Guangzhou:'广州', Chengdu:'成都', Hangzhou:'杭州',
+  Wuhan:'武汉', Xian:'西安', "Xi'an":'西安', Suzhou:'苏州', Changsha:'长沙', Zhengzhou:'郑州',
+  Shenyang:'沈阳', Qingdao:'青岛', Dalian:'大连', Xiamen:'厦门', Fuzhou:'福州', Jinan:'济南',
+  Hefei:'合肥', Kunming:'昆明', Guiyang:'贵阳', Nanning:'南宁', Taiyuan:'太原', Shijiazhuang:'石家庄',
+  Harbin:'哈尔滨', Changchun:'长春', Nanchang:'南昌', Urumqi:'乌鲁木齐', Lanzhou:'兰州',
+  Xining:'西宁', Yinchuan:'银川', Hohhot:'呼和浩特', Lhasa:'拉萨', Haikou:'海口', Sanya:'三亚',
+  Dongguan:'东莞', Foshan:'佛山', Wuxi:'无锡', Ningbo:'宁波', Wenzhou:'温州', Nantong:'南通',
+  Yantai:'烟台', Luoyang:'洛阳', Baotou:'包头', Zhuhai:'珠海', Zhongshan:'中山', Huizhou:'惠州'};
+function renderVisitor(v){
+  let {region, city, isp} = v;
   region = PROV_ZH[region] || region;
-  city = PROV_ZH[city] || city;
+  city = CITY_ZH[city] || PROV_ZH[city] || city;
   const place = (city && city !== region) ? `${region} ${city}` : region;
   let carrier = '';
   if(/移动|Mobile/i.test(isp)) carrier = '移动';
   else if(/电信|Telecom/i.test(isp)) carrier = '电信';
   else if(/联通|Unicom/i.test(isp)) carrier = '联通';
   else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
+  const carrierZh = {'移动': '中国移动', '电信': '中国电信', '联通': '中国联通', '广电': '中国广电'}[carrier] || '';
   const near = /陕西|Shaanxi/i.test(region);
   window.__netLabel = `${place}${carrier ? ` · ${carrier}` : (isp ? ` · ${isp}` : '')}`;
   if(typeof updBigMeta === 'function') updBigMeta();
-  $('vbarText').innerHTML = `📍 你的出口：<b>${place}</b>${isp ? ` · <b>${isp}</b>` : ''} — ` +
-    (near ? '与主力实测源在同一地区，页面标注数据对你参考价值高。'
+  const asnTxt = /^AS?\d+$/i.test(v.asn || '') ? `ASN 编号 AS${String(v.asn).replace(/^AS/i, '')}` : '';
+  const countryZh = {China: '中国', 'United States': '美国', Japan: '日本', Singapore: '新加坡',
+                     'Hong Kong': '中国香港', Taiwan: '中国台湾', 'South Korea': '韩国'}[v.country] || v.country;
+  const detail = [carrierZh ? isp : '', asnTxt,
+                  countryZh && !place.includes(countryZh) ? countryZh : '']
+    .filter(Boolean).join(' · ');
+  $('vbarText').innerHTML = `📍 你的出口：${v.ip ? `<b>${v.ip}</b> · ` : ''}<b>${place}</b>` +
+    `${carrierZh ? ` · <b>${carrierZh}</b>` : (isp ? ` · <b>${isp}</b>` : '')}` +
+    (detail ? `<br><span style="color:var(--dim);font-size:12px">${detail}</span>` : '') +
+    `<br>` + (near ? '与主力实测源在同一地区，页面标注数据对你参考价值高。'
           : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
   if(carrier){
     const b = $('vbarBtn');
@@ -1340,13 +1366,16 @@ async function detectVisitor(){
       const j = await (await fetchT('https://ipwho.is/')).json();
       if(!j || j.success === false) throw 0;
       return {region: j.region || j.country || '', city: j.city || '',
-              isp: (j.connection && (j.connection.isp || j.connection.org)) || ''};
+              isp: (j.connection && (j.connection.isp || j.connection.org)) || '',
+              ip: j.ip || '', country: j.country || '',
+              asn: (j.connection && j.connection.asn) ? 'AS' + j.connection.asn : ''};
     },
     async () => {
       const j = await (await fetchT('https://free.freeipapi.com/api/json')).json();
       if(!j || (!j.regionName && !j.countryName)) throw 0;
       return {region: j.regionName || j.countryName || '', city: j.cityName || '',
-              isp: j.asnOrganization || ''};
+              isp: j.asnOrganization || '', ip: j.ipAddress || '',
+              country: j.countryName || '', asn: j.asn || ''};
     },
     async () => {
       const tr = await (await fetchT('https://cloudflare.com/cdn-cgi/trace')).text();
@@ -1355,13 +1384,14 @@ async function detectVisitor(){
       const j = await (await fetchT('https://api.ipapi.is/?ip=' + encodeURIComponent(ip))).json();
       const loc = (j && j.location) || {}, asn = (j && j.asn) || {};
       if(!loc.state && !loc.country) throw 0;
-      return {region: loc.state || loc.country || '', city: loc.city || '', isp: asn.org || ''};
+      return {region: loc.state || loc.country || '', city: loc.city || '', isp: asn.org || '',
+              ip, country: loc.country || '', asn: asn.asn || ''};
     },
   ];
   for(const fn of tries){
     try{
       const v = await fn();
-      if(v.region || v.city){ renderVisitor(v.region, v.city, v.isp); return; }
+      if(v.region || v.city){ renderVisitor(v); return; }
     }catch(e){ /* 换下一路 */ }
   }
 }
@@ -1411,7 +1441,7 @@ $('btnTopLink').addEventListener('click', () =>
     `<span class="chip">数据源 <b>${META.sources.filter(s=>s.ok).length}/${META.sources.length}</b> 正常</span>` +
     `<span class="chip">更新于 <b>${META.generated_at}</b></span>`;
   $('links').innerHTML =
-    `<div>🏆 今日推荐 Top 20（${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${new URL('data/top.txt', location.href).href}</a>` +
+    `<div>🏆 今日推荐 Top 20（前 20 名，${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${new URL('data/top.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/top.txt">复制</button></div>` +
     Object.entries(META.groups).map(([k, g]) =>
     `<div>${g.name}（${g.count} ${k === 'domains' ? '个' : '条'}） <a href="${g.file}" target="_blank" rel="noopener">${new URL(g.file, location.href).href}</a>` +
