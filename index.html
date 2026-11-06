@@ -242,7 +242,7 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card">
   <h3>④ 我的订阅链接（自动更新）</h3>
-  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。</div>
+  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。<b>两种模式怎么选</b>：不测速、想让客户端定时更新就自动换上最新节点的 → 用这条实时链接；自己测速、只想要测通的那批且不许它自己变的 → 用下面的快照链接。</div>
   <div class="ctrl">
     <input id="subUrl" readonly>
     <button class="btn primary" id="btnSubCopy">复制订阅链接</button>
@@ -599,7 +599,7 @@ function probe(addr, timeoutMs){
     const img = new Image();
     const t0 = performance.now();
     const done = ok => { res(ok ? Math.round(performance.now() - t0) : -1); };
-    const timer = setTimeout(() => done(false), timeoutMs || 4000);
+    const timer = setTimeout(() => done(false), timeoutMs || 5000);
     img.onload = () => { clearTimeout(timer); done(true); };
     img.onerror = () => { clearTimeout(timer); done(true); };
     img.src = `https://${hostport}/favicon.ico?_=${Date.now()}${Math.random()}`;
@@ -625,7 +625,7 @@ async function scanPool(scope){
   async function worker(){
     while(idx < total && scanning){
       const p = parseLine(lines[idx++]);
-      lat[p.addr] = await probe(p.addr, 4000);
+      lat[p.addr] = await probe(p.addr, 5000);
       if(lat[p.addr] >= 0) okN++;
       doneN++;
       if(doneN % 25 === 0 || doneN === total){
@@ -665,7 +665,7 @@ async function runTest(){
   async function worker(){
     while(idx < total){
       const p = parseLine(lines[idx++]);
-      lat[p.addr] = await probe2(p.addr, 4000);
+      lat[p.addr] = await probe2(p.addr, 5000);
       doneN++;
       if(doneN % 5 === 0 || doneN === total){
         $('testnote').textContent = `本地测速中… ${doneN}/${total}（每条双测取低值）`;
@@ -772,7 +772,7 @@ async function scanV6(){
     while(idx < total){
       const line = POOL6[idx++];
       const key = line.match(/^\[[^\]]+\]:\d+/)[0];
-      lat6[key] = await probe(key, 3000);
+      lat6[key] = await probe(key, 5000);
       if(lat6[key] >= 0) okN++;
       doneN++;
       if(doneN % 10 === 0 || doneN === total){
@@ -964,7 +964,7 @@ async function scanBig(){
   async function worker(){
     while(idx < total && bigScanning){
       const i = idx++;
-      BIGRES[i] = await probe(`${BIG[i].ip}:${BIG[i].port}`, 2500);
+      BIGRES[i] = await probe(`${BIG[i].ip}:${BIG[i].port}`, 5000);
       if(BIGRES[i] >= 0) okN++;
       doneN++;
       if(doneN % 50 === 0 || doneN === total){ $('bigInfo').textContent = `检测中… ${doneN}/${total} · 可用 ${okN}`; renderBig(); }
