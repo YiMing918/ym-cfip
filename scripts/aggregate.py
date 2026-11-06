@@ -38,13 +38,13 @@ COLO2CC = {
 
 SOURCES_NATIVE = [
     {
-        "key": "best", "name": "陕西移动实测 · 高速优选",
+        "key": "best", "name": "实测源 · 高速优选",
         "urls": ["https://ips.gaoji.uk/best_ips.txt",
                  "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/best_ips.txt"],
-        "note": "svip-s/cloudflare_ip，测试地陕西移动，源站整点更新",
+        "note": "svip-s/cloudflare_ip，单地区运营商网络实测，源站整点更新",
     },
     {
-        "key": "full", "name": "陕西移动实测 · 全部可用",
+        "key": "full", "name": "实测源 · 全部可用",
         "urls": ["https://ips.gaoji.uk/full_ips.txt",
                  "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/full_ips.txt"],
         "note": "同上，全量可用池",
@@ -244,10 +244,10 @@ def main():
     (DATA / "top.txt").write_text("\n".join(number_lines(top_lines)) + "\n", encoding="utf-8")
 
     group_meta = {
-        "best": ("高速优选", "陕西移动实测里下载最快的一批，条数少、质量优先"),
+        "best": ("高速优选", "实测源里下载最快的一批，条数少、质量优先"),
         "usjp": ("美日精选", "静态整理：日本 86 + 美国 264（2026-11-03 多源交叉汇编）"),
-        "full": ("全部可用", "陕西移动实测全量池，条数多，自己再筛"),
-        "extra": ("全国补充", "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径非陕西专测"),
+        "full": ("全部可用", "实测源全量池，条数多，自己再筛"),
+        "extra": ("全国补充", "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径，非单地区专测"),
         "all": ("合并总表", "以上四组合并去重，一份拿全"),
     }
     meta_groups = {}
