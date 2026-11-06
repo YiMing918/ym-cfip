@@ -657,7 +657,7 @@ function refreshAvail(){
   renderChips();
 }
 async function runTest(){
-  const lines = RESULT.slice(0, 300);
+  const lines = RESULT.slice();
   if(!lines.length) return;
   const btn = $('btnTest'); btn.disabled = true;
   let doneN = 0, idx = 0;
