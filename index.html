@@ -127,7 +127,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </nav>
 
 <div class="card">
-  <h3>🏆 今日推荐（陕西移动实测 · 高速优选 Top 20）</h3>
+  <h3>🏆 今日推荐（实测源 · 高速优选 Top 20）</h3>
   <div class="toolbar">
     <button class="btn primary" id="btnTopCopy">复制 Top 20</button>
     <button class="btn" id="btnTopDl">下载文件</button>
@@ -138,7 +138,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <thead><tr><th>#</th><th>地址（点地址复制整行）</th><th>地区</th><th>源测速</th></tr></thead>
     <tbody id="toprows"></tbody>
   </table></div>
-  <div class="note" style="margin-top:6px">不知道选哪个先用这批：源站在陕西移动实测里下载最快的前 20。速度因地区线路而异，你本地未必同序。</div>
+  <div class="note" style="margin-top:6px">不知道选哪个先用这批：源站在实测源里下载最快的前 20。速度因地区线路而异，你本地未必同序。</div>
 </div>
 
 <div class="card">
@@ -181,9 +181,9 @@ footer a{color:var(--acc2);text-decoration:none}
     <label>取数 <select id="mode">
       <option value="quality">质量优先</option><option value="random">随机抽取</option>
     </select></label>
-    <span class="selinfo">延迟优先用本地实测，没测过用源标注；速度只有陕西移动实测源带数据。<b>设了门槛后，没对应数据的条目会被滤掉。</b></span>
+    <span class="selinfo">延迟优先用本地实测，没测过用源标注；速度只有实测源带数据。<b>设了门槛后，没对应数据的条目会被滤掉。</b></span>
   </div>
-  <div class="note" style="margin-top:8px">每地区内部按来源质量优先取前 N（高速优选 &gt; 美日精选 &gt; 全国补充 &gt; 全量池）；选中地区后钮里小框可单独定量。运营商筛选：带运营商标注的只留对应运营商，无标注的源（如陕西移动实测）不分运营商、照常保留。随机抽取适合分摊使用、避免所有人挤同几个 IP。</div>
+  <div class="note" style="margin-top:8px">每地区内部按来源质量优先取前 N（高速优选 &gt; 美日精选 &gt; 全国补充 &gt; 全量池）；选中地区后钮里小框可单独定量。运营商筛选：带运营商标注的只留对应运营商，无标注的源（如实测源）不分运营商、照常保留。随机抽取适合分摊使用、避免所有人挤同几个 IP。</div>
 </div>
 
 <div class="card">
@@ -344,7 +344,7 @@ footer a{color:var(--acc2);text-decoration:none}
 <div class="card">
   <h3>口径说明</h3>
   <div class="note">
-    <b>本站只聚合、不测速。</b>地区与速度来自各源在其测试地的标注：带测试地的源（如 svip-s 为陕西移动实测）离你越近参考价值越高；全国源是全国口径。四网（移动/电信/联通/广电）里，<b>广电全网暂无公开实测源</b> — 选广电时给的是通用条目，广电用户请务必用「检测本地可用」在自家广电网络上实测筛选，那才是广电的真数据。<br>
+    <b>本站只聚合、不测速。</b>地区与速度来自各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。四网（移动/电信/联通/广电）里，<b>广电全网暂无公开实测源</b> — 选广电时给的是通用条目，广电用户请务必用「检测本地可用」在自家广电网络上实测筛选，那才是广电的真数据。<br>
     <b>「本地可用 / 本地测速」</b>是浏览器向每个 IP 发起 HTTPS 握手探测（证书不匹配 IP 会报错返回，测的是报错前耗时）：超时内有响应 = 你当前网络能连上该 IP:端口。它不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值，更稳。<br>
     <b>「送复检站」</b>会复制当前清单并打开你选的 IP 监测站（推荐 IPCheck.ing，也可自填任意监测站地址，选择保存在本地浏览器）。<br>
     优选域名由第三方维护，使用人数多时晚高峰可能变卡，作回退入口更合适。优选 IP 时效性强，失效条目以下一次聚合为准。
@@ -1104,7 +1104,7 @@ function renderVisitor(region, city, isp){
   else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
   const near = /陕西|Shaanxi/i.test(region);
   $('vbarText').innerHTML = `📍 你的出口：<b>${place}</b>${isp ? ` · <b>${isp}</b>` : ''} — ` +
-    (near ? '与主力实测源（陕西移动）同省，页面标注数据对你参考价值高。'
+    (near ? '与主力实测源在同一地区，页面标注数据对你参考价值高。'
           : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
   if(carrier){
     const b = $('vbarBtn');
