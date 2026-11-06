@@ -32,6 +32,7 @@ html{scroll-behavior:smooth}
 #qnav::-webkit-scrollbar{display:none}
 #qnav a{flex:0 0 auto;background:var(--chip);border:1px solid var(--line);color:var(--txt);text-decoration:none;font-size:13px;padding:8px 13px;border-radius:999px}
 #qnav a:hover{border-color:var(--acc)}
+#qnav a.on{background:var(--acc);border-color:var(--acc);color:#201304;font-weight:700}
 .card h3{cursor:pointer;user-select:none}
 .card h3 .chev{float:right;color:var(--dim);font-size:13px;transition:transform .2s;margin-left:8px}
 .card.closed h3 .chev{transform:rotate(-90deg)}
@@ -123,7 +124,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
 </header>
 <nav id="qnav">
-  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cLinks">直链</a><a href="#cRaw">原始直链</a><a href="#cSrc">来源</a><a href="#cNote">说明</a>
+  <a href="#cGen" data-tab="gen">①② 选 IP</a><a href="#cTop" data-tab="top">🏆 今日推荐</a><a href="#cSub" data-tab="sub">③ 订阅</a><a href="#cDom" data-tab="dom">④ 域名</a><a href="#cV6" data-tab="v6">⑤ IPv6</a><a href="#cBig" data-tab="big">⑥ 大池</a><a href="#cLinks" data-tab="links">直链</a><a href="#cSrc" data-tab="src">来源</a><a href="#cNote" data-tab="note">说明</a>
 </nav>
 
 <div class="card">
@@ -363,7 +364,15 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>本站怎么运作（口径说明）</h3>
+  <h3>使用说明与本站口径</h3>
+  <div class="note" style="border:1px solid var(--acc2);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+    <b>四步上手。</b><br>
+    <b>第一步 · 选</b> — 在「①② 选 IP」里勾地区、定每地区数量，按需多选运营商、设延迟 / 速度门槛，点「生成清单」。<br>
+    <b>第二步 · 验</b> — 对清单点「本地可用检测」或「本地测速」：这是在<b>你自己的网络</b>上现场测，通不通、多少毫秒以这个为准；本站数据是各源站在自家测试地测的，只作参考。<br>
+    <b>第三步 · 用</b> — 直接复制清单粘进客户端；或在「③ 订阅」里存一份<b>快照</b>，生成你的专属链接，只含你测通的那批，不随聚合变动。<br>
+    <b>第四步 · 长效</b> — 想长期自动更新：用「③ 订阅」的实时订阅链接（随本站每轮聚合刷新），或去「直链」拿现成分组文件；想用某家原味的，复制「直链」里各源原始直链，源站自己更新。<br>
+    <b>每个类目干什么</b> — 选 IP：生成与实测清单；今日推荐：源站测速 Top 20；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况与更新记录；说明：本页。
+  </div>
   <div class="note">
     <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 19 个公开优选源拉取清单（实测源、全国三网源、IPv6 源、优选域名，明细见上方「数据来源」），统一格式、去重后生成总池。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP 被多个源收录只算一次；某个源某轮抓取失败，它独有的条目会临时掉出、下一轮自动恢复。页面顶部「更新于」就是最近一轮的时间。<br>
@@ -380,6 +389,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 <div id="toast"></div>
 <script>
+window.__initHash = location.hash;
 // 复检站点为页面级设置（推荐 IPCheck.ing / ping0.cc / 自定义），保存在访客浏览器 localStorage。
 const NAMES = {CN:'中国',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦'};
 const PRESETS = {
@@ -1163,9 +1173,26 @@ $('btnBigSnap').addEventListener('click', async () => {
 $('btnBigSnapCopy').addEventListener('click', () => copyText($('bigSnapUrl').value, '已复制快照订阅链接'));
 
 // ===== 卡片折叠（移动端默认收起次要卡片）=====
+const TABMAP = { gen: ['cGen', 'cList'], top: ['cTop'], sub: ['cSub'], dom: ['cDom'], v6: ['cV6'], big: ['cBig'], links: ['cLinks', 'cRaw'], src: ['cSrc'], note: ['cNote'] };
+function activateTab(name){
+  if(!TABMAP[name]) name = 'gen';
+  const show = new Set(TABMAP[name]);
+  document.querySelectorAll('.card').forEach(c => { c.style.display = show.has(c.id) ? '' : 'none'; });
+  document.querySelectorAll('#qnav a').forEach(a => a.classList.toggle('on', a.dataset.tab === name));
+}
+function initTabs(){
+  document.querySelectorAll('#qnav a').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    activateTab(a.dataset.tab);
+    history.replaceState(null, '', '#' + (TABMAP[a.dataset.tab] || ['cGen'])[0]);
+  }));
+  let start = 'gen';
+  const h = (window.__initHash || location.hash).replace('#', '');
+  for(const [tab, cards] of Object.entries(TABMAP)) if(cards.includes(h)) { start = tab; break; }
+  activateTab(start);
+}
 function initCards(){
   const ids = ['cTop', 'cGen', 'cList', 'cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cRaw', 'cSrc', 'cNote'];
-  const mobileFold = new Set(['cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cRaw', 'cSrc', 'cNote']);
   document.querySelectorAll('.card').forEach((card, i) => {
     if(ids[i]) card.id = ids[i];
     const h3 = card.querySelector('h3');
@@ -1178,8 +1205,8 @@ function initCards(){
     chev.className = 'chev'; chev.textContent = '▾';
     h3.appendChild(chev);
     h3.addEventListener('click', () => card.classList.toggle('closed'));
-    if(window.innerWidth <= 760 && mobileFold.has(card.id)) card.classList.add('closed');
   });
+  initTabs();
 }
 
 function resolveRecheckUrl(){
