@@ -146,6 +146,12 @@ A：Fork 的仓库默认禁用 Actions，到仓库 Actions 页手动启用；另
 **Q：可以加自己的源或自己的 IP 吗？**
 A：可以。编辑 `seed-usjp.txt` 加静态条目；或改 `scripts/aggregate.py` 的源列表加新源（需能解析出地区）。
 
+**Q：新 Cloudflare 账号点「连接 GitHub」一直跳回应用设置页，看不到仓库？**
+A：GitHub 上的「Cloudflare Workers and Pages」应用只能绑定一个 Cloudflare 账号。若你的 GitHub 已绑过另一个 CF 账号，新账号就连不上（卸载重装会断开旧账号项目的 Git 部署，慎重）。解法：新账号改用「直接上传」建 Pages 项目，再到新账号创建一个 Pages 编辑权限的 API 令牌，与账号 ID 一起存入仓库 Secrets（`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`），本仓工作流会在每次聚合后自动把最新站点推送部署上去，效果与连 Git 一致。
+
+**Q：Fork 后工作流里「推送部署」那步需要我处理吗？**
+A：不需要。没配上述两个 Secrets 时该步自动跳过，聚合与数据提交照常；连 Git 部署的用户本来也用不到它。
+
 ## 隐私
 
 - 本站纯静态、无后端、无统计，不记录访客信息。
