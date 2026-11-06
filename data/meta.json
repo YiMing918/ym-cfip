@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-11-06 17:58 CST",
+  "generated_at": "2026-11-06 18:20 CST",
   "top": {
     "count": 20,
     "file": "data/top.txt"
   },
-  "total": 927,
+  "total": 925,
   "v6_total": 45,
   "domains_total": 36,
   "groups": {
@@ -28,33 +28,32 @@
     },
     "extra": {
       "name": "全国补充",
-      "count": 227,
+      "count": 225,
       "file": "data/extra.txt",
       "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径非陕西专测"
     },
     "all": {
       "name": "合并总表",
-      "count": 927,
+      "count": 925,
       "file": "data/all.txt",
       "note": "以上四组合并去重，一份拿全"
     }
   },
   "regions": {
-    "US": 296,
+    "US": 294,
     "JP": 97,
-    "SG": 59,
-    "HK": 45,
-    "DE": 29,
+    "SG": 64,
+    "HK": 47,
     "KR": 25,
-    "GB": 16,
-    "NL": 15,
-    "FI": 13,
-    "TW": 13,
-    "LV": 12,
-    "EE": 12,
+    "DE": 25,
+    "NL": 20,
+    "LV": 13,
+    "FI": 11,
+    "GB": 11,
+    "FR": 11,
+    "TW": 11,
     "IN": 10,
     "AU": 10,
-    "FR": 10,
     "CH": 10,
     "AT": 10,
     "CA": 10,
@@ -65,6 +64,7 @@
     "CZ": 10,
     "IT": 10,
     "BG": 10,
+    "EE": 10,
     "RO": 10,
     "MD": 10,
     "RU": 10,
@@ -99,6 +99,7 @@
     "AR": 1,
     "OM": 1,
     "PH": 1,
+    "LU": 1,
     "NZ": 1,
     "AZ": 1,
     "BY": 1,
@@ -192,8 +193,8 @@
       "name": "Mia 优选",
       "url": "https://bestcf.tools12345.com/xinyitang3/ipv4.txt",
       "ok": true,
-      "lines_in": 22,
-      "lines_used": 20,
+      "lines_in": 20,
+      "lines_used": 18,
       "note": "全国源补充；2 条无地区标注已剔除"
     },
     {
