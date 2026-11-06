@@ -204,6 +204,19 @@ footer a{color:var(--acc2);text-decoration:none}
     <input id="recheckCustom" type="url" placeholder="填你自己的监测站地址，如 https://ip.example.com" style="display:none;flex:1;min-width:200px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 12px;font-size:13.5px">
     <span class="selinfo">「送复检站」= 复制当前清单并打开所选站点，在那边逐个核对归属与纯净度；选择会记在你浏览器里。</span>
   </div>
+  <div class="ctrl" style="margin-top:8px">
+    <label>导出格式 <input id="fmtInput" type="text" style="min-width:240px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 12px;font-size:13.5px;font-family:ui-monospace,Menlo,Consolas,monospace"></label>
+    <span class="selinfo">变量：{地区} {代码} {序号} {延迟} {网速} {运营商} {来源} {端口} {日期} {标签} {旗帜} — 想加啥加啥，套用到复制 / 下载 / 订阅链接，记在你浏览器里</span>
+  </div>
+  <div class="ctrl" id="fmtPresets" style="margin-top:6px">
+    <button class="btn" data-fmt="{代码}{序号} [{标签}]">默认</button>
+    <button class="btn" data-fmt="{地区}{序号}">中文简洁</button>
+    <button class="btn" data-fmt="{旗帜}{地区}{序号}">旗帜+中文</button>
+    <button class="btn" data-fmt="{地区}{序号} {延迟} {网速}">中文带测速</button>
+    <button class="btn" data-fmt="{代码}{序号}">英文简洁</button>
+    <button class="btn" data-fmt="{来源}-{地区}{序号}">来源+中文</button>
+    <span class="selinfo" id="fmtPreview"></span>
+  </div>
   <div class="tblwrap scrollbox" style="max-height:52vh"><table>
     <thead><tr><th>#</th><th>地址（点地址复制整行）</th><th>地区</th><th>类型 / 来源</th><th>本地延迟</th></tr></thead>
     <tbody id="rows"></tbody>
@@ -340,7 +353,7 @@ async function copyText(txt, msg){
   toast(msg || '已复制');
 }
 function parseLine(line){
-  const m = line.match(/^(\S+?)#([A-Z]{2})\s*(?:\[(.*)\])?$/);
+  const m = line.match(/^(\S+?)#([A-Z]{2})\d*\s*(?:\[(.*)\])?$/);
   if(!m) return {addr: line, region: '—', tag: '', srcMs: null, srcMbps: null, port: '', carrier: ''};
   const tag = m[3] || '';
   const ms = tag.match(/([\d.]+)\s*ms/i);
@@ -351,6 +364,74 @@ function parseLine(line){
           srcMs: ms ? parseFloat(ms[1]) : null,
           srcMbps: mbps ? parseFloat(mbps[1]) : null};
 }
+// ===== 导出格式自定义：模板变量渲染备注名，套用到复制 / 下载 / 订阅 fmt 参数 =====
+const FMT_DEFAULT = '{代码}{序号} [{标签}]';
+let FMT = FMT_DEFAULT;
+try{ FMT = localStorage.getItem('cfipFmt') || FMT_DEFAULT; }catch(e){}
+function flagEmoji(cc){
+  if(!cc || !/^[A-Z]{2}$/.test(cc)) return '';
+  return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
+}
+function parseAny(line){
+  const p = parseLine(line);
+  if(p.region !== '—') return p;
+  const m = line.match(/^(\[[^\]]+\]:\d+)#IPv6\d*\s*(?:\[(.*)\])?$/);
+  if(m) return { addr: m[1], region: 'IPv6', tag: m[2] || '', port: (m[1].match(/:(\d+)$/) || [])[1] || '',
+                 carrier: ((m[2] || '').match(/·(移动|电信|联通|广电)/) || [])[1] || '', srcMs: null, srcMbps: null };
+  return p;
+}
+function srcName(tag){
+  return (tag || '').replace(/[\d.]+\s*ms/i, '').replace(/[\d.]+\s*Mbps/i, '')
+    .replace(/·(移动|电信|联通|广电)/, '').replace(/\s+/g, ' ').trim();
+}
+function todayStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function renderRemark(tpl, p, seq){
+  const local = p.localMs !== undefined ? p.localMs : lat[p.addr];
+  const ms = (local !== undefined && local !== null && local >= 0) ? local : p.srcMs;
+  let r = tpl
+    .replaceAll('{地区}', p.region === 'IPv6' ? 'IPv6' : (NAMES[p.region] || p.region))
+    .replaceAll('{代码}', p.region)
+    .replaceAll('{序号}', String(seq))
+    .replaceAll('{延迟}', ms !== null && ms !== undefined ? `${ms}ms` : '')
+    .replaceAll('{网速}', p.srcMbps ? `${p.srcMbps}Mbps` : '')
+    .replaceAll('{运营商}', p.carrier || '')
+    .replaceAll('{来源}', srcName(p.tag))
+    .replaceAll('{端口}', p.port || '')
+    .replaceAll('{日期}', todayStr())
+    .replaceAll('{标签}', p.tag || '')
+    .replaceAll('{旗帜}', flagEmoji(p.region));
+  return r.replace(/\[\s*\]/g, '').replace(/\s+/g, ' ').trim();
+}
+function formatLines(lines){
+  const cnt = {};
+  return lines.map(l => {
+    const p = parseAny(l);
+    cnt[p.region] = (cnt[p.region] || 0) + 1;
+    const r = renderRemark(FMT, p, cnt[p.region]);
+    return r ? `${p.addr}#${r}` : p.addr;
+  });
+}
+function bigRemark(seq, localMs){
+  const r = renderRemark(FMT, { addr: '', region: '', tag: '', carrier: '', srcMs: null, srcMbps: null, localMs }, seq);
+  return (!r || /^\d+$/.test(r)) ? `优选${seq}` : r;
+}
+function fmtPreviewUpdate(){
+  const sample = { addr: '13.196.179.169:443', region: 'JP', tag: '优选高速 82.13ms 16.72Mbps', carrier: '', srcMs: 82.13, srcMbps: 16.72 };
+  const r = renderRemark(FMT, sample, 1);
+  $('fmtPreview').textContent = `预览：${sample.addr}#${r}`;
+}
+$('fmtInput').value = FMT;
+$('fmtInput').addEventListener('input', e => {
+  FMT = e.target.value;
+  try{ localStorage.setItem('cfipFmt', FMT); }catch(err){}
+  fmtPreviewUpdate(); refreshSub();
+});
+document.querySelectorAll('#fmtPresets button').forEach(b =>
+  b.addEventListener('click', () => { $('fmtInput').value = b.dataset.fmt; $('fmtInput').dispatchEvent(new Event('input')); }));
+fmtPreviewUpdate();
 function effMs(p){
   const v = lat[p.addr];
   if(v !== undefined && v >= 0) return v;
@@ -676,6 +757,7 @@ function buildSubUrl(stack6){
     if($('ports').value !== 'all') parts.push('ports=' + $('ports').value);
     if($('mode').value === 'random') parts.push('mode=random');
   }
+  if(FMT && FMT !== FMT_DEFAULT) parts.push('fmt=' + encodeURIComponent(FMT));
   if($('subUi').value) parts.push('ui=' + $('subUi').value);
   return base + '?' + parts.join('&');
 }
@@ -740,9 +822,9 @@ $('btnSelAvail').addEventListener('click', () => {
   toast(`已选 ${selected.size} 个有可用的地区，点「生成清单」出清单`);
 });
 $('btnCopy').addEventListener('click', () =>
-  copyText(RESULT.join('\n'), `已复制清单 ${RESULT.length} 条`));
+  copyText(formatLines(RESULT).join('\n'), `已复制清单 ${RESULT.length} 条`));
 $('btnDl').addEventListener('click', () => {
-  const blob = new Blob([RESULT.join('\n') + '\n'], {type: 'text/plain'});
+  const blob = new Blob([formatLines(RESULT).join('\n') + '\n'], {type: 'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'ym-cfip-selected.txt'; a.click();
   URL.revokeObjectURL(a.href);
@@ -819,16 +901,16 @@ $('btnBigStop').addEventListener('click', () => { bigScanning = false; });
 $('bigN').addEventListener('change', sampleBig);
 $('bigPort').addEventListener('change', sampleBig);
 $('btnBigCopy').addEventListener('click', () =>
-  copyText(BIG.map(e => `${e.ip}:${e.port}`).join('\n'), `已复制 ${BIG.length} 条采样`));
+  copyText(BIG.map((e, i) => `${e.ip}:${e.port}#${bigRemark(i + 1, BIGRES[i] >= 0 ? BIGRES[i] : null)}`).join('\n'), `已复制 ${BIG.length} 条采样`));
 $('btnBigDl').addEventListener('click', () => {
-  const blob = new Blob([BIG.map(e => `${e.ip}:${e.port}`).join('\n') + '\n'], { type: 'text/plain' });
+  const blob = new Blob([BIG.map((e, i) => `${e.ip}:${e.port}#${bigRemark(i + 1, BIGRES[i] >= 0 ? BIGRES[i] : null)}`).join('\n') + '\n'], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'ym-cfip-bigpool.txt'; a.click();
   URL.revokeObjectURL(a.href);
 });
 $('btnBigCopyOk').addEventListener('click', () => {
   const ok = BIG.map((e, i) => ({ e, v: BIGRES[i] })).filter(x => x.v >= 0)
-    .sort((a, b) => a.v - b.v).map(x => `${x.e.ip}:${x.e.port}`);
+    .sort((a, b) => a.v - b.v).map((x, i) => `${x.e.ip}:${x.e.port}#${bigRemark(i + 1, x.v)}`);
   copyText(ok.join('\n'), `已复制可用 ${ok.length} 条（按延迟升序）`);
 });
 
@@ -952,16 +1034,16 @@ $('btnDomTest').addEventListener('click', testDomains);
 $('btnDomCopy').addEventListener('click', () =>
   copyText(DOMAINS.map(d => d.dom).join('\n'), `已复制 ${DOMAINS.length} 个域名`));
 $('btnV6Scan').addEventListener('click', scanV6);
-$('btnV6Copy').addEventListener('click', () => copyText(POOL6.join('\n'), `已复制 IPv6 ${POOL6.length} 条`));
+$('btnV6Copy').addEventListener('click', () => copyText(formatLines(POOL6).join('\n'), `已复制 IPv6 ${POOL6.length} 条`));
 $('btnV6CopyOk').addEventListener('click', () => {
   const ok = POOL6.filter(l => { const k = l.match(/^\[[^\]]+\]:\d+/)[0]; return lat6[k] !== undefined && lat6[k] >= 0; });
-  copyText(ok.join('\n'), `已复制可用 IPv6 ${ok.length} 条`);
+  copyText(formatLines(ok).join('\n'), `已复制可用 IPv6 ${ok.length} 条`);
 });
 $('btnV6Sub').addEventListener('click', () => copyText(buildSubUrl(true), '已复制 IPv6 订阅链接'));
 $('btnTopCopy').addEventListener('click', () =>
-  copyText(TOPLINES.join('\n'), `已复制今日推荐 ${TOPLINES.length} 条`));
+  copyText(formatLines(TOPLINES).join('\n'), `已复制今日推荐 ${TOPLINES.length} 条`));
 $('btnTopDl').addEventListener('click', () => {
-  const blob = new Blob([TOPLINES.join('\n') + '\n'], {type: 'text/plain'});
+  const blob = new Blob([formatLines(TOPLINES).join('\n') + '\n'], {type: 'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'ym-cfip-top20.txt'; a.click();
   URL.revokeObjectURL(a.href);
