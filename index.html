@@ -297,6 +297,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn" id="btnDomLink">复制聚合直链</button>
     <span class="selinfo" id="domininfo"></span>
   </div>
+  <div class="stats" id="domstats" style="margin:8px 0 0"></div>
   <div id="domlist" class="scrollbox" style="margin-top:8px;max-height:264px"></div>
 </div>
 
@@ -310,6 +311,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn" id="btnV6Sub">复制 IPv6 订阅链接</button>
     <span class="selinfo" id="v6info"></span>
   </div>
+  <div class="stats" id="v6stats" style="margin:8px 0 0"></div>
   <div class="v6box scrollbox" id="v6box" style="margin-top:10px;max-height:264px"></div>
 </div>
 
@@ -377,7 +379,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <b>每个类目干什么</b> — 今日推荐（默认首页）：源站测速 Top 20，现成可用；选 IP：生成与实测清单；订阅：快照与实时订阅；域名 / IPv6 / 大池：三个独立池子；直链：现成分组 + 各源原始链接；来源：每个源的聚合情况、更新节奏与抓取时间；说明：本页。
   </div>
   <div class="note">
-    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 24 个公开优选源拉取清单（18 个 IP 源 + 6 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
+    <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 24 个公开优选源拉取清单（18 个 IP 源 + 6 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（换成 Base64、分享链接、JSON、CSV 等）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP 被多个源收录只算一次；某个源某轮抓取失败，它独有的条目会临时掉出、下一轮自动恢复。页面顶部「更新于」就是最近一轮的时间。<br>
     <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 握手探测（超时统一 5 秒，对齐主流客户端健康检查的默认口径；证书不匹配 IP 会报错返回，测的是报错前耗时）：有响应 = 你当前网络能连上该 IP:端口，不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
     <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。<br>
@@ -394,7 +396,7 @@ footer a{color:var(--acc2);text-decoration:none}
 <script>
 window.__initHash = location.hash;
 // 复检站点为页面级设置（推荐 IPCheck.ing / ping0.cc / 自定义），保存在访客浏览器 localStorage。
-const NAMES = {CN:'中国',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦'};
+const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦'};
 const PRESETS = {
   usjp: ['JP','US'],
   asia: ['CN','HK','TW','JP','KR','SG','MY','TH','VN','ID','IN','PH','KH','PK','KZ','TM','KG','AZ','GE','AM'],
@@ -450,7 +452,7 @@ const FMT_DEFAULT = '{代码}{序号} [{标签}]';
 let FMT = FMT_DEFAULT;
 try{ FMT = localStorage.getItem('cfipFmt') || FMT_DEFAULT; }catch(e){}
 function flagEmoji(cc){
-  if(!cc || !/^[A-Z]{2}$/.test(cc)) return '';
+  if(!cc || !/^[A-Z]{2}$/.test(cc) || cc === 'SW') return '';
   return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
 }
 function parseAny(line){
@@ -775,6 +777,17 @@ function renderTop(lines){
   document.querySelectorAll('#toprows .addr').forEach(el =>
     el.addEventListener('click', () => copyText(el.dataset.line, '已复制：' + el.dataset.line)));
 }
+function renderDomStats(){
+  const bySrc = {};
+  DOMAINS.forEach(d => {
+    const src = d.label.startsWith('社区分流') ? '社区分流' : (d.label.split(' · ').pop() || '其他');
+    bySrc[src] = (bySrc[src] || 0) + 1;
+  });
+  $('domstats').innerHTML = `<span class="chip">共 <b>${DOMAINS.length}</b> 个</span>` +
+    Object.entries(bySrc).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('') +
+    (META && META.domains_screened ? `<span class="chip">本轮解析筛除 <b>${META.domains_screened}</b> 个</span>` : '');
+}
 function renderDomains(){
   $('domlist').innerHTML = DOMAINS.map((d, i) =>
     `<div class="domrow"><span class="dom" data-i="${i}">${d.dom}</span>` +
@@ -786,8 +799,9 @@ function renderDomains(){
 }
 async function testDomains(){
   const btn = $('btnDomTest'); btn.disabled = true;
-  let idx = 0, doneN = 0;
+  let idx = 0, doneN = 0, okN = 0;
   const total = DOMAINS.length;
+  const results = new Array(total);
   async function testOne(d){
     const url = `https://${d.dom}/cdn-cgi/trace`;
     const t0 = performance.now();
@@ -822,6 +836,8 @@ async function testDomains(){
     while(idx < total){
       const i = idx++;
       const r = await testOne(DOMAINS[i]);
+      results[i] = r;
+      if(r.ms >= 0) okN++;
       const el = $(`domlat${i}`), ce = $(`domcolo${i}`);
       if(el){
         if(r.ms >= 0){ el.textContent = `${r.ms} ms`; el.className = `lat ${r.ms<200?'good':r.ms<600?'mid':'bad'}`; }
@@ -829,12 +845,45 @@ async function testDomains(){
       }
       if(ce && (r.colo || r.ip)) ce.textContent = [r.colo && `机房 ${r.colo}`, r.ip && `落地 ${r.ip}`].filter(Boolean).join(' · ');
       doneN++;
-      $('domininfo').textContent = `实测中… ${doneN}/${total}`;
+      $('domininfo').textContent = `实测中… ${doneN}/${total} · 可达 ${okN}`;
     }
   }
   await Promise.all(Array.from({length: 6}, worker));
-  $('domininfo').textContent = `实测完成（${total} 个域名，延迟为你当前网络到该域名的实测值）`;
+  const ok = results.map((r, i) => ({...r, dom: DOMAINS[i].dom})).filter(r => r.ms >= 0);
+  let summary = `实测完成：可达 <b>${ok.length}</b>/${total} · 不可达 ${total - ok.length}`;
+  if(ok.length){
+    const fastest = ok.reduce((a, b) => (b.ms < a.ms ? b : a));
+    const avg = Math.round(ok.reduce((s, r) => s + r.ms, 0) / ok.length);
+    summary += ` · 最快 ${fastest.dom} ${fastest.ms}ms · 平均 ${avg}ms`;
+    const colos = {};
+    ok.forEach(r => { if(r.colo) colos[r.colo] = (colos[r.colo] || 0) + 1; });
+    const coloStr = Object.entries(colos).sort((a, b) => b[1] - a[1]).slice(0, 6)
+      .map(([k, v]) => `${k} ${v}`).join(' · ');
+    if(coloStr) summary += `<br>落地机房分布（能读到 trace 的）：${coloStr}`;
+  }
+  $('domininfo').innerHTML = summary;
   btn.disabled = false;
+}
+function v6TagOf(l){
+  const m = l.match(/#\S+\s*\[(.+)\]\s*$/);
+  return m ? m[1] : '';
+}
+function renderV6Stats(){
+  const bySrc = {}, byCar = {}, addrs = new Set();
+  POOL6.forEach(l => {
+    const km = l.match(/^\[[^\]]+\]:\d+/);
+    if(km) addrs.add(km[0]);
+    const tag = v6TagOf(l);
+    const src = tag.split('·')[0] || '未标注';
+    const car = (tag.match(/移动|电信|联通|广电/) || ['未标注'])[0];
+    bySrc[src] = (bySrc[src] || 0) + 1;
+    byCar[car] = (byCar[car] || 0) + 1;
+  });
+  $('v6stats').innerHTML = `<span class="chip">共 <b>${POOL6.length}</b> 条 · <b>${addrs.size}</b> 个地址</span>` +
+    Object.entries(bySrc).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<span class="chip">来源 ${k} <b>${v}</b></span>`).join('') +
+    Object.entries(byCar).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
 }
 function renderV6(){
   $('v6count').textContent = `（共 ${POOL6.length} 条）`;
@@ -864,7 +913,18 @@ async function scanV6(){
     }
   }
   await Promise.all(Array.from({length: 10}, worker));
-  $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 可用`;
+  const perCar = {};
+  POOL6.forEach(l => {
+    const car = (v6TagOf(l).match(/移动|电信|联通|广电/) || ['未标注'])[0];
+    perCar[car] = perCar[car] || [0, 0];
+    perCar[car][1]++;
+    const key = l.match(/^\[[^\]]+\]:\d+/)[0];
+    if(lat6[key] >= 0) perCar[car][0]++;
+  });
+  const carStr = Object.entries(perCar).sort((a, b) => b[1][1] - a[1][1])
+    .map(([c, [o, t]]) => `${c} ${o}/${t}`).join(' · ');
+  $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 可用（${total ? Math.round(okN / total * 100) : 0}%）` +
+    (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
   btn.disabled = false;
   renderV6();
@@ -1345,7 +1405,7 @@ $('btnTopLink').addEventListener('click', () =>
   loadCfg();
   $('stats').innerHTML =
     `<span class="chip">全球池 <b>${META.total}</b> 条</span>` +
-    `<span class="chip">覆盖 <b>${Object.keys(META.regions || {}).length}</b> 个地区</span>` +
+    `<span class="chip">覆盖 <b>${Object.keys(META.regions || {}).filter(k => k !== 'SW').length}</b> 个地区</span>` +
     `<span class="chip">IPv6 <b>${META.v6_total || 0}</b> 条</span>` +
     `<span class="chip">优选域名 <b>${META.domains_total || 0}</b> 个</span>` +
     `<span class="chip">数据源 <b>${META.sources.filter(s=>s.ok).length}/${META.sources.length}</b> 正常</span>` +
@@ -1402,10 +1462,12 @@ $('btnTopLink').addEventListener('click', () =>
     const carrierDoms = new Set(CARRIER_DOMAINS.map(d => d.dom));
     DOMAINS = [...CARRIER_DOMAINS, ...list.filter(d => !carrierDoms.has(d.dom))];
     renderDomains();
-  }).catch(() => { DOMAINS = [...CARRIER_DOMAINS]; renderDomains(); });
+    renderDomStats();
+  }).catch(() => { DOMAINS = [...CARRIER_DOMAINS]; renderDomains(); renderDomStats(); });
   getText('data/all6.txt').then(t => {
     POOL6 = t.split('\n').map(s => s.trim()).filter(Boolean);
     renderV6();
+    renderV6Stats();
   }).catch(() => {});
   fetch('data/history.json' + T).then(r => r.json()).then(h => {
     $('history').innerHTML = h.slice(0, 6).map(x =>
