@@ -123,7 +123,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
 </header>
 <nav id="qnav">
-  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">③ 你的清单</a><a href="#cSub">④ 订阅</a><a href="#cDom">⑤ 域名</a><a href="#cV6">⑥ IPv6</a><a href="#cBig">⑦ 大池采样</a><a href="#cSrc">数据</a>
+  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cSrc">数据</a>
 </nav>
 
 <div class="card">
@@ -169,7 +169,7 @@ footer a{color:var(--acc2);text-decoration:none}
   <div class="ctrl">
     <label>每个地区最多 <input type="number" id="perN" min="1" placeholder="不限"> 个</label>
     <label><input type="checkbox" id="onlyAvail"> 只生成本地测通的</label>
-    <button class="btn primary" id="btnGen">② 生成清单</button>
+    <button class="btn primary" id="btnGen">生成清单</button>
     <span class="selinfo" id="selinfo"></span>
   </div>
   <div class="ctrl">
@@ -187,7 +187,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>③ 你的清单 <span class="tag" id="rescount"></span></h3>
+  <h3>② 你的清单 <span class="tag" id="rescount"></span></h3>
   <div class="toolbar">
     <input type="search" id="q" placeholder="过滤：输入 IP / 地区 / 关键词…">
     <button class="btn primary" id="btnCopy">复制清单</button>
@@ -249,7 +249,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>④ 我的订阅链接（自动更新）</h3>
+  <h3>③ 我的订阅链接（自动更新）</h3>
   <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。<b>两种模式怎么选</b>：不测速、想让客户端定时更新就自动换上最新节点的 → 用这条实时链接；自己测速、只想要测通的那批且不许它自己变的 → 用下面的快照链接。</div>
   <div class="ctrl">
     <input id="subUrl" readonly>
@@ -267,7 +267,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
   <div class="ctrl">
     <button class="btn" id="btnSnap">📌 把当前清单存为快照订阅（本地测通版）</button>
-    <span class="selinfo">把③清单此刻的内容（已含你的本地筛选与导出格式）定格存一份、生成专属链接；客户端拉它就是这一批，不随聚合变化。重新测速后回来再存一次，会生成新链接（快照保留 180 天）。</span>
+    <span class="selinfo">把②清单此刻的内容（已含你的本地筛选与导出格式）定格存一份、生成专属链接；客户端拉它就是这一批，不随聚合变化。重新测速后回来再存一次，会生成新链接（快照保留 180 天）。</span>
   </div>
   <div class="ctrl" id="snapRow" style="display:none">
     <input id="snapUrl" readonly>
@@ -287,7 +287,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>⑤ 优选域名（可直接当节点地址用）</h3>
+  <h3>④ 优选域名（可直接当节点地址用）</h3>
   <div class="note">优选域名 = 解析到优质 CF 边缘的域名，效果类似优选 IP 但不用管 IP 失效。带「分流」的是社区维护的运营商分流域名（第三方维护，稳定性自行判断）；其余为 svip-s 收集的大厂 CF 域名。点「批量实测」从你当前网络逐个测它们的真实延迟与落地机房。</div>
   <div class="ctrl">
     <button class="btn primary" id="btnDomTest">⚡ 批量实测</button>
@@ -298,7 +298,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>⑥ IPv6 池 <span class="tag" id="v6count"></span></h3>
+  <h3>⑤ IPv6 池 <span class="tag" id="v6count"></span></h3>
   <div class="note">IPv6 源不带地区标注，单独成池。能不能用取决于你本地网络的 IPv6 通道 — 点检测从你当前网络逐个试连。</div>
   <div class="ctrl">
     <button class="btn" id="btnV6Scan">🌐 检测本地可用（IPv6）</button>
@@ -311,7 +311,7 @@ footer a{color:var(--acc2);text-decoration:none}
 </div>
 
 <div class="card">
-  <h3>⑦ 大池采样（官方段 · 未实测）</h3>
+  <h3>⑥ 大池采样（官方段 · 未实测）</h3>
   <div class="note">从 Cloudflare 官方公布的 IP 段（15 段、约 190 万个地址）随机采样。Anycast 不分地区、这批<b>未经任何实测</b> — 正确用法是点「本地检测这批」，在你自己的网络里筛出能用的。</div>
   <div class="ctrl">
     <label>采样数量 <select id="bigN"><option value="500">500</option><option value="1000" selected>1000</option><option value="2000">2000</option><option value="5000">5000</option></select></label>
@@ -865,11 +865,11 @@ function snapScopeLines(){
   });
 }
 $('btnSnap').addEventListener('click', async () => {
-  if(!RESULT.length){ toast('先在③生成清单，再存快照'); return; }
+  if(!RESULT.length){ toast('先生成清单，再存快照'); return; }
   const scope = $('snapScope').value;
   const lines = snapScopeLines();
   if(!lines.length){
-    toast(scope === 'all' ? '清单是空的' : '还没有测通的数据：先在②点「检测本地可用」或在③点「本地测速」，再存快照');
+    toast(scope === 'all' ? '清单是空的' : '还没有测通的数据：先在①点「检测本地可用」或在②点「本地测速」，再存快照');
     return;
   }
   $('btnSnap').disabled = true;
@@ -970,7 +970,7 @@ $('btnSort').addEventListener('click', () => {
   renderTable(); toast('已按本地延迟排序');
 });
 $('ordMode').addEventListener('change', () => { if(RESULT.length) renderTable(); });
-// ===== ⑦ 大池采样（官方段随机，未实测）=====
+// ===== ⑥ 大池采样（官方段随机，未实测）=====
 const CF_SEG = ['173.245.48.0/20','103.21.244.0/22','103.22.200.0/22','103.31.4.0/22','141.101.64.0/18','108.162.192.0/18','190.93.240.0/20','188.114.96.0/20','197.234.240.0/22','198.41.128.0/17','162.158.0.0/15','104.16.0.0/13','104.24.0.0/14','172.64.0.0/13','131.0.72.0/22']
   .map(s => { const [ip, bits] = s.split('/'); return { base: ip.split('.').reduce((a, o) => a * 256 + (+o), 0), size: Math.pow(2, 32 - (+bits)) }; });
 const SEG_TOTAL = CF_SEG.reduce((a, r) => a + r.size, 0);
