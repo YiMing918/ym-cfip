@@ -537,7 +537,7 @@ def main():
         pairs = parse_domains(text, src["fmt"], src.get("default_label", ""))
         for dom, label in pairs:
             if dom not in dom_map:
-                dom_map[dom] = f"{label} · {src['short']}" if label else src["short"]
+                dom_map[dom] = f"{label} · {src['short']}" if label else f"优选域名 · {src['short']}"
         meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
                              "lines_in": len(text.splitlines()),
                              "lines_used": len(pairs),
