@@ -139,6 +139,24 @@ def parse_loose(text, tag):
     return out, skipped
 
 
+def number_lines(lines):
+    """导出编号：在 #地区 后、方括号前加同地区序号（#JP1、#JP2…）；无地区标注的统一 #IPv6 编号。"""
+    cnt, out = {}, []
+    for ln in lines:
+        m = re.match(r"^(\S+?)#([A-Z]{2})\s*(\[.*)?$", ln)
+        if m:
+            cc = m.group(2)
+            cnt[cc] = cnt.get(cc, 0) + 1
+            ln = f"{m.group(1)}#{cc}{cnt[cc]}" + (f" {m.group(3)}" if m.group(3) else "")
+        else:
+            m6 = re.match(r"^(\S+?)\s*(\[.*)?$", ln)
+            if m6:
+                cnt["IPv6"] = cnt.get("IPv6", 0) + 1
+                ln = f"{m6.group(1)}#IPv6{cnt['IPv6']}" + (f" {m6.group(2)}" if m6.group(2) else "")
+        out.append(ln)
+    return out
+
+
 def dedupe(lines):
     seen, out = set(), []
     for line in lines:
@@ -223,7 +241,7 @@ def main():
 
     # 今日推荐：高速优选前 20（源内按测速排名）
     top_lines = groups["best"][:20]
-    (DATA / "top.txt").write_text("\n".join(top_lines) + "\n", encoding="utf-8")
+    (DATA / "top.txt").write_text("\n".join(number_lines(top_lines)) + "\n", encoding="utf-8")
 
     group_meta = {
         "best": ("高速优选", "陕西移动实测里下载最快的一批，条数少、质量优先"),
@@ -234,7 +252,7 @@ def main():
     }
     meta_groups = {}
     for key, lines in groups.items():
-        (DATA / f"{key}.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (DATA / f"{key}.txt").write_text("\n".join(number_lines(lines)) + "\n", encoding="utf-8")
         name, note = group_meta[key]
         meta_groups[key] = {"name": name, "count": len(lines),
                             "file": f"data/{key}.txt", "note": note}
@@ -262,7 +280,7 @@ def main():
                              "lines_used": len(lines),
                              "note": "IPv6 源（半小时更新），源不带地区标注"})
     v6_all = dedupe(v6_all)
-    (DATA / "all6.txt").write_text("\n".join(v6_all) + "\n", encoding="utf-8")
+    (DATA / "all6.txt").write_text("\n".join(number_lines(v6_all)) + "\n", encoding="utf-8")
 
     # 优选域名（svip-s 维护）
     dom_text, _ = fetch(DOMAIN_URLS)
