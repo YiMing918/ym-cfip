@@ -123,7 +123,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
 </header>
 <nav id="qnav">
-  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cLinks">直链</a><a href="#cSrc">来源</a><a href="#cNote">说明</a>
+  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cLinks">直链</a><a href="#cRaw">原始直链</a><a href="#cSrc">来源</a><a href="#cNote">说明</a>
 </nav>
 
 <div class="card">
@@ -347,6 +347,12 @@ footer a{color:var(--acc2);text-decoration:none}
 <div class="card">
   <h3>现成分组直链（可直接当订阅源）</h3>
   <div class="links" id="links"></div>
+</div>
+
+<div class="card">
+  <h3>各源原始直链（源站自维护 · 自动更新）</h3>
+  <div class="note">上面是本站聚合加工过的分组；这里是<b>各优选源自己的原始链接，照原样列出</b>，你想用哪家的原味就复制哪家。内容由源站按自己的节奏更新（半小时 / 整点 / 一天三次不等），你把链接加进客户端或面板，客户端每次拉取拿到的都是<b>源站最新版</b> — 本站只列地址、不缓存不过手，所以不存在本站更新不及时的问题。格式均为通用的 <b>IP:端口#备注</b>，兼容主流客户端与 EDT 面板。</div>
+  <div class="links" id="rawlinks"></div>
 </div>
 
 <div class="card">
@@ -1158,8 +1164,8 @@ $('btnBigSnapCopy').addEventListener('click', () => copyText($('bigSnapUrl').val
 
 // ===== 卡片折叠（移动端默认收起次要卡片）=====
 function initCards(){
-  const ids = ['cTop', 'cGen', 'cList', 'cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cSrc', 'cNote'];
-  const mobileFold = new Set(['cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cSrc', 'cNote']);
+  const ids = ['cTop', 'cGen', 'cList', 'cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cRaw', 'cSrc', 'cNote'];
+  const mobileFold = new Set(['cSub', 'cDom', 'cV6', 'cBig', 'cLinks', 'cRaw', 'cSrc', 'cNote']);
   document.querySelectorAll('.card').forEach((card, i) => {
     if(ids[i]) card.id = ids[i];
     const h3 = card.querySelector('h3');
@@ -1320,6 +1326,29 @@ $('btnTopLink').addEventListener('click', () =>
     `<button class="pbtn" data-link="${g.file}">复制</button></div>`).join('') +
     `<div>IPv6 池（${META.v6_total || 0} 条） <a href="data/all6.txt" target="_blank" rel="noopener">${new URL('data/all6.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/all6.txt">复制</button></div>`;
+  const RAW_LINKS = [
+    ['实测源 · 高速优选', 'https://ips.gaoji.uk/best_ips.txt', '整点更新'],
+    ['实测源 · 全部可用', 'https://ips.gaoji.uk/full_ips.txt', '整点更新'],
+    ['微测优选', 'https://bestcf.tools12345.com/wetest/ipv4.txt', '半小时更新'],
+    ['CFYes 优选', 'https://bestcf.tools12345.com/cfyes/ipv4.txt', '半小时 · 分三网'],
+    ['麒麟优选', 'https://bestcf.tools12345.com/uouin/all.txt', '约 10 分钟'],
+    ['CM 优选', 'https://bestcf.tools12345.com/cmliu/all.txt', '半小时更新'],
+    ['CM 优选 2', 'https://bestcf.tools12345.com/cmliu2/all.txt', '半小时更新'],
+    ['辣椒优选', 'https://bestcf.tools12345.com/lajiao/all.txt', '半小时更新'],
+    ['洛璃优选', 'https://bestcf.tools12345.com/luoli/all.txt', '半小时更新'],
+    ['Mia 优选', 'https://bestcf.tools12345.com/xinyitang3/ipv4.txt', '半小时更新'],
+    ['天诚优选', 'https://bestcf.tools12345.com/tiancheng/all.txt', '一天三次'],
+    ['天诚优选 2', 'https://bestcf.tools12345.com/tiancheng2/all.txt', '一天三次'],
+    ['vvHan 优选', 'https://bestcf.tools12345.com/vvhan/ipv4.txt', '半小时 · 分三网'],
+    ['NiREvil 优选', 'https://bestcf.tools12345.com/nirevil/ipv4.txt', '每日更新'],
+    ['优选域名（svip-s）', 'https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt', '整点更新'],
+    ['CFYes IPv6', 'https://bestcf.tools12345.com/cfyes/ipv6.txt', '半小时 · 分三网'],
+    ['vvHan IPv6', 'https://bestcf.tools12345.com/vvhan/ipv6.txt', '半小时 · 分三网'],
+    ['NiREvil IPv6', 'https://bestcf.tools12345.com/nirevil/ipv6.txt', '每日更新'],
+  ];
+  $('rawlinks').innerHTML = RAW_LINKS.map(([n, u, cad]) =>
+    `<div>${n} <span class="tag">${cad}</span> <a href="${u}" target="_blank" rel="noopener">${u}</a>` +
+    `<button class="pbtn" data-link="${u}">复制</button></div>`).join('');
   document.querySelectorAll('[data-link]').forEach(b => b.addEventListener('click', () =>
     copyText(new URL(b.dataset.link, location.href).href, '已复制直链')));
   $('sources').innerHTML = META.sources.map(s =>
