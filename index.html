@@ -92,7 +92,7 @@ tr:hover td{background:#13223c}
 .src .st{font-size:12px;border-radius:6px;padding:1px 7px;margin-left:6px;background:#14301d;color:var(--ok)}
 .src .st.fail{background:#3a1712;color:var(--bad)}
 .links{font-size:13.5px;line-height:2.1}
-.links a{color:var(--acc2);text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.links a{color:var(--acc2);text-decoration:none;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;word-break:break-all}
 .links button{margin-left:8px}
 .note{font-size:13px;color:var(--dim);line-height:1.85}
 .note b{color:var(--txt)}
@@ -123,7 +123,7 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
 </header>
 <nav id="qnav">
-  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cSrc">数据</a>
+  <a href="#cTop">🏆 今日推荐</a><a href="#cGen">① 选地区</a><a href="#cList">② 你的清单</a><a href="#cSub">③ 订阅</a><a href="#cDom">④ 域名</a><a href="#cV6">⑤ IPv6</a><a href="#cBig">⑥ 大池采样</a><a href="#cLinks">直链</a><a href="#cSrc">来源</a><a href="#cNote">说明</a>
 </nav>
 
 <div class="card">
@@ -1204,12 +1204,12 @@ $('btnTopLink').addEventListener('click', () =>
     `<span class="chip">数据源 <b>${META.sources.filter(s=>s.ok).length}/${META.sources.length}</b> 正常</span>` +
     `<span class="chip">更新于 <b>${META.generated_at}</b></span>`;
   $('links').innerHTML =
-    `<div>🏆 今日推荐 Top 20（${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${location.href.replace(/[^/]*$/, '')}data/top.txt</a>` +
+    `<div>🏆 今日推荐 Top 20（${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${new URL('data/top.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/top.txt">复制</button></div>` +
     Object.entries(META.groups).map(([k, g]) =>
-    `<div>${g.name}（${g.count} 条） <a href="${g.file}" target="_blank" rel="noopener">${location.href.replace(/[^/]*$/, '')}${g.file}</a>` +
+    `<div>${g.name}（${g.count} 条） <a href="${g.file}" target="_blank" rel="noopener">${new URL(g.file, location.href).href}</a>` +
     `<button class="pbtn" data-link="${g.file}">复制</button></div>`).join('') +
-    `<div>IPv6 池（${META.v6_total || 0} 条） <a href="data/all6.txt" target="_blank" rel="noopener">${location.href.replace(/[^/]*$/, '')}data/all6.txt</a>` +
+    `<div>IPv6 池（${META.v6_total || 0} 条） <a href="data/all6.txt" target="_blank" rel="noopener">${new URL('data/all6.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/all6.txt">复制</button></div>`;
   document.querySelectorAll('[data-link]').forEach(b => b.addEventListener('click', () =>
     copyText(new URL(b.dataset.link, location.href).href, '已复制直链')));
