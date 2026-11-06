@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-06 16:36 CST",
+  "generated_at": "2026-11-06 16:44 CST",
   "top": {
     "count": 20,
     "file": "data/top.txt"
@@ -118,7 +118,7 @@
     },
     {
       "name": "陕西移动实测 · 全部可用",
-      "url": "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/full_ips.txt",
+      "url": "https://ips.gaoji.uk/full_ips.txt",
       "ok": true,
       "lines_in": 419,
       "lines_used": 414,
