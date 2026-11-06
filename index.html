@@ -625,7 +625,7 @@ async function scanPool(scope){
   async function worker(){
     while(idx < total && scanning){
       const p = parseLine(lines[idx++]);
-      lat[p.addr] = await probe(p.addr, 2500);
+      lat[p.addr] = await probe(p.addr, 4000);
       if(lat[p.addr] >= 0) okN++;
       doneN++;
       if(doneN % 25 === 0 || doneN === total){
@@ -853,7 +853,7 @@ function saveCfg(){
   try{
     const cfg = {r: [...selected], n: $('perN').value, rn: regionN,
       ms: $('maxMs').value, mb: $('minMbps').value, ca: [...carrierSet],
-      po: $('ports').value, mo: $('mode').value, oa: $('onlyAvail').checked};
+      po: $('ports').value, mo: $('mode').value, oa: $('onlyAvail').checked, fmt: FMT};
     const s = btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
     history.replaceState(null, '', '#c=' + s);
   }catch(e){}
@@ -872,6 +872,7 @@ function loadCfg(){
     if(cfg.po) $('ports').value = cfg.po;
     if(cfg.mo) $('mode').value = cfg.mo;
     $('onlyAvail').checked = !!cfg.oa;
+    if(cfg.fmt !== undefined){ $('fmtInput').value = cfg.fmt; $('fmtInput').dispatchEvent(new Event('input')); }
   }catch(e){}
 }
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
