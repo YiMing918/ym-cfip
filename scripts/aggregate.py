@@ -7,8 +7,10 @@
 """
 import json
 import re
+import socket
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -185,7 +187,74 @@ V6_SOURCES = [
      "url": "https://bestcf.tools12345.com/nirevil/ipv6.txt"},
 ]
 V6_RE = re.compile(r"\[([0-9a-fA-F:]+)\]:(\d+)")
-DOMAIN_URLS = ["https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt"]
+DOMAIN_SOURCES = [
+    {"name": "优选域名（svip-s）", "short": "svip-s", "fmt": "hash",
+     "url": "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt"},
+    {"name": "优选域名（BestCF 全量）", "short": "BestCF", "fmt": "bestcf",
+     "url": "https://bestcf.tools12345.com/domain/all.txt"},
+    {"name": "优选域名（BestCF 亚洲）", "short": "BestCF亚洲", "fmt": "bestcf",
+     "url": "https://bestcf.tools12345.com/domain/Domain-Asia.txt"},
+    {"name": "优选域名（cf-nodes）", "short": "cf-nodes", "fmt": "hash",
+     "url": "https://raw.githubusercontent.com/wukan1986/cf-nodes/main/best_domains.txt"},
+    {"name": "优选域名（cmliu 官方）", "short": "cmliu", "fmt": "bare",
+     "default_label": "CF 官方域名",
+     "url": "https://raw.githubusercontent.com/cmliu/CF-Pages-BestCF/main/cf_domains.txt"},
+    {"name": "优选域名（BestCF 高访问量）", "short": "BestCF高访问量", "fmt": "bare",
+     "default_label": "高访问量域名",
+     "url": "https://bestcf.tools12345.com/domain/Domain-TOP.txt"},
+]
+# 各源站自身的更新节奏（页面「数据来源」与 README 展示，本站抓取节奏另见工作流）
+CADENCE = {
+    "实测源 · 高速优选": "整点更新", "实测源 · 全部可用": "整点更新",
+    "美日精选（静态整理）": "静态整理 · 不更新",
+    "微测优选": "半小时更新", "CFYes 优选": "半小时更新", "麒麟优选": "约 10 分钟",
+    "CM 优选": "半小时更新", "CM 优选 2": "半小时更新", "辣椒优选": "半小时更新",
+    "洛璃优选": "半小时更新", "Mia 优选": "半小时更新", "天诚优选": "一天三次",
+    "天诚优选 2": "一天三次", "vvHan 优选": "半小时更新", "NiREvil 优选": "每日更新",
+    "CFYes IPv6": "半小时更新", "vvHan IPv6": "半小时更新", "NiREvil IPv6": "每日更新",
+    "优选域名（svip-s）": "整点更新", "优选域名（BestCF 全量）": "不定期 · 随源站",
+    "优选域名（BestCF 亚洲）": "不定期 · 随源站",
+    "优选域名（cf-nodes）": "不定期 · 仓库维护",
+    "优选域名（cmliu 官方）": "不定期 · 投稿合并",
+    "优选域名（BestCF 高访问量）": "不定期 · 随源站",
+}
+DOM_RE = re.compile(r"^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$", re.I)
+
+
+def parse_domains(text, fmt, default_label=""):
+    out = []
+    for raw in text.splitlines():
+        line = ZW_RE.sub("", raw.strip())
+        if not line or line.startswith("#") or line.startswith("//"):
+            continue
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}", line):
+            continue  # IP 行不收（BestCF 全量含官方入口 IP）
+        if fmt == "bestcf":
+            m = re.match(r"^([A-Za-z0-9.-]+)(?::\d+)?\s*(?:#(.*))?$", line)
+            if not m:
+                continue
+            dom, lab = m.group(1), (m.group(2) or "").strip()
+            if "|" in lab:
+                lab = lab.split("|")[-1].strip()
+            label = lab or default_label
+        elif fmt == "hash":
+            dom, _, lab = line.partition("#")
+            dom = dom.strip().split(":")[0]
+            label = lab.strip() or default_label
+        else:
+            dom, label = line.split()[0], default_label
+        dom = dom.strip().lower().rstrip(".")
+        if DOM_RE.match(dom):
+            out.append((dom, label))
+    return out
+
+
+def resolves(dom):
+    try:
+        socket.getaddrinfo(dom, 443, proto=socket.IPPROTO_TCP)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def parse_v6(text, tag):
@@ -240,10 +309,16 @@ def main():
             continue
         lines, skipped = parse_loose(text, src["tag"])
         extra_all.extend(lines)
+        if not lines:
+            note = ("源内容异常（混入网页代码），本轮自动跳过"
+                    if ("<!DOCTYPE" in text or "<html" in text.lower())
+                    else "源当前格式无地区标注，按本站规则（无地区不收）本轮未收录")
+        else:
+            note = f"全国源补充；{skipped} 条无地区标注已剔除"
         meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
                              "lines_in": len(text.splitlines()),
                              "lines_used": len(lines),
-                             "note": f"全国源补充；{skipped} 条无地区标注已剔除"})
+                             "note": note})
     groups["extra"] = dedupe(extra_all)
 
     merged = dedupe(groups["best"] + groups["usjp"] + groups["extra"] + groups["full"])
@@ -288,23 +363,44 @@ def main():
         meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
                              "lines_in": len(text.splitlines()),
                              "lines_used": len(lines),
-                             "note": "IPv6 源（半小时更新），源不带地区标注"})
+                             "note": "IPv6 源，源不带地区标注"})
     v6_all = dedupe(v6_all)
     (DATA / "all6.txt").write_text("\n".join(number_lines(v6_all)) + "\n", encoding="utf-8")
 
-    # 优选域名（svip-s 维护）
-    dom_text, _ = fetch(DOMAIN_URLS)
-    domains = []
-    if dom_text:
-        domains = [ln.strip() for ln in dom_text.splitlines()
-                   if ln.strip() and not ln.startswith("#")]
+    # 优选域名（多源聚合：合并去重 + DNS 解析筛除失效域名）
+    dom_map = {}
+    for src in DOMAIN_SOURCES:
+        text, used_url = fetch(src["url"])
+        if text is None:
+            meta_sources.append({"name": src["name"], "url": src["url"], "ok": False,
+                                 "lines_in": 0, "lines_used": 0,
+                                 "note": "域名源，抓取失败"})
+            continue
+        pairs = parse_domains(text, src["fmt"], src.get("default_label", ""))
+        for dom, label in pairs:
+            if dom not in dom_map:
+                dom_map[dom] = f"{label} · {src['short']}" if label else src["short"]
+        meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
+                             "lines_in": len(text.splitlines()),
+                             "lines_used": len(pairs),
+                             "note": "优选域名源，与其他域名源合并去重"})
+    with ThreadPoolExecutor(max_workers=24) as ex:
+        alive = list(ex.map(resolves, list(dom_map.keys())))
+    domains, screened = [], 0
+    for (dom, lab), ok_ in zip(dom_map.items(), alive):
+        if ok_:
+            domains.append(f"{dom}#{lab}")
+        else:
+            screened += 1
     (DATA / "domains.txt").write_text("\n".join(domains) + "\n", encoding="utf-8")
-    meta_sources.append({"name": "优选域名（svip-s）", "url": DOMAIN_URLS[0],
-                         "ok": bool(domains), "lines_in": len(domains),
-                         "lines_used": len(domains),
-                         "note": "大厂 CF 域名，可作优选域名/回退入口"})
+    meta_groups["domains"] = {"name": "优选域名", "count": len(domains),
+                               "file": "data/domains.txt",
+                               "note": f"{len(DOMAIN_SOURCES)} 个域名源聚合去重，本轮解析筛除 {screened} 个"}
 
     generated_at = datetime.now(CST).strftime("%Y-%m-%d %H:%M CST")
+    for e in meta_sources:
+        e["cadence"] = CADENCE.get(e["name"], "—")
+        e["fetched_at"] = "—" if e["name"] == "美日精选（静态整理）" else generated_at[11:16]
 
     # 更新历史（保留最近 30 次）
     hist_file = DATA / "history.json"
@@ -326,6 +422,7 @@ def main():
         "total": len(merged),
         "v6_total": len(v6_all),
         "domains_total": len(domains),
+        "domains_screened": screened,
         "groups": meta_groups,
         "regions": regions,
         "sources": meta_sources,
