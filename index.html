@@ -161,6 +161,7 @@ footer a{color:var(--acc2);text-decoration:none}
   <div class="rgrid" id="rgrid"></div>
   <div class="ctrl">
     <button class="btn" id="btnScan">🌐 检测本地可用（全池）</button>
+    <button class="btn" id="btnScanSel">只检测已选地区</button>
     <button class="btn" id="btnStop" style="display:none">停止检测</button>
     <button class="btn" id="btnSelAvail" disabled>只选有可用的地区</button>
     <span class="selinfo" id="scaninfo"></span>
@@ -216,6 +217,21 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn" data-fmt="{代码}{序号}">英文简洁</button>
     <button class="btn" data-fmt="{来源}-{地区}{序号}">来源+中文</button>
     <span class="selinfo" id="fmtPreview"></span>
+  </div>
+  <div class="ctrl" id="fmtVars" style="margin-top:6px">
+    <span class="selinfo">点变量往格式里加：</span>
+    <button class="btn" data-tok="{地区}">地区</button>
+    <button class="btn" data-tok="{代码}">代码</button>
+    <button class="btn" data-tok="{序号}">序号</button>
+    <button class="btn" data-tok="{延迟}">延迟</button>
+    <button class="btn" data-tok="{网速}">网速</button>
+    <button class="btn" data-tok="{运营商}">运营商</button>
+    <button class="btn" data-tok="{来源}">来源</button>
+    <button class="btn" data-tok="{端口}">端口</button>
+    <button class="btn" data-tok="{日期}">日期</button>
+    <button class="btn" data-tok="{标签}">标签</button>
+    <button class="btn" data-tok="{旗帜}">旗帜</button>
+    <button class="btn" id="fmtClear">清空</button>
   </div>
   <div class="tblwrap scrollbox" style="max-height:52vh"><table>
     <thead><tr><th>#</th><th>地址（点地址复制整行）</th><th>地区</th><th>类型 / 来源</th><th>本地延迟</th></tr></thead>
@@ -333,7 +349,11 @@ const CARRIER_DOMAINS = [
 let META = null, POOL = [], POOL6 = [], DOMAINS = [];
 const selected = new Set(['JP','US']);
 const regionN = {};
-let carrierSel = '全部';
+let carrierSet = new Set();
+function syncCarrierChips(){
+  document.querySelectorAll('.carrier').forEach(x => x.classList.toggle('on',
+    x.dataset.carrier === '全部' ? carrierSet.size === 0 : carrierSet.has(x.dataset.carrier)));
+}
 let RESULT = [];
 const lat = {}, lat6 = {};
 let availByRegion = null;
@@ -431,6 +451,15 @@ $('fmtInput').addEventListener('input', e => {
 });
 document.querySelectorAll('#fmtPresets button').forEach(b =>
   b.addEventListener('click', () => { $('fmtInput').value = b.dataset.fmt; $('fmtInput').dispatchEvent(new Event('input')); }));
+document.querySelectorAll('#fmtVars [data-tok]').forEach(b => b.addEventListener('click', () => {
+  const inp = $('fmtInput'), t = b.dataset.tok;
+  const st = inp.selectionStart !== null && inp.selectionStart !== undefined ? inp.selectionStart : inp.value.length;
+  const en = inp.selectionEnd !== null && inp.selectionEnd !== undefined ? inp.selectionEnd : inp.value.length;
+  inp.value = inp.value.slice(0, st) + t + inp.value.slice(en);
+  inp.dispatchEvent(new Event('input'));
+  inp.focus(); try{ inp.setSelectionRange(st + t.length, st + t.length); }catch(e){}
+}));
+$('fmtClear').addEventListener('click', () => { $('fmtInput').value = ''; $('fmtInput').dispatchEvent(new Event('input')); });
 fmtPreviewUpdate();
 function effMs(p){
   const v = lat[p.addr];
@@ -438,7 +467,7 @@ function effMs(p){
   return p.srcMs;
 }
 function passFilters(p){
-  if(carrierSel !== '全部' && p.carrier && p.carrier !== carrierSel) return false;
+  if(carrierSet.size && p.carrier && !carrierSet.has(p.carrier)) return false;
   const ports = $('ports').value;
   if(ports === '443' && p.port !== '443') return false;
   if(ports === 'tls' && !TLS_PORTS.has(p.port)) return false;
@@ -514,7 +543,7 @@ function renderChips(){
   });
   const cc2 = carrierCounts();
   $('carrierinfo').innerHTML = `带标注：移动 ${cc2['移动']} · 电信 ${cc2['电信']} · 联通 ${cc2['联通']} · 广电 ${cc2['广电']} · 无标注通用 ${cc2['通用']}` +
-    (carrierSel === '广电' && cc2['广电'] === 0 ? '<br>⚠️ 全网暂无广电实测源：当前清单为通用条目，请用「检测本地可用」在广电网络上实测筛选。' : '');
+    (carrierSet.has('广电') && cc2['广电'] === 0 ? '<br>⚠️ 全网暂无广电实测源：当前清单为通用条目，请用「检测本地可用」在广电网络上实测筛选。' : '');
 }
 function updateSelInfo(){
   $('selinfo').innerHTML = `已选 <b>${selected.size}</b> 个地区 · 将生成 <b>${buildList().length}</b> 条`;
@@ -566,13 +595,14 @@ async function probe2(addr, timeoutMs){
   return b < 0 ? a : Math.min(a, b);
 }
 let scanning = false;
-async function scanPool(){
+async function scanPool(scope){
   if(scanning) return;
   scanning = true;
-  $('btnScan').disabled = true;
+  $('btnScan').disabled = true; $('btnScanSel').disabled = true;
   $('btnStop').style.display = '';
   $('btnSelAvail').disabled = true;
-  const lines = POOL.slice();
+  const lines = scope === 'sel' ? POOL.filter(l => selected.has(parseLine(l).region)) : POOL.slice();
+  if(!lines.length){ scanning = false; $('btnScan').disabled = false; $('btnScanSel').disabled = false; $('btnStop').style.display = 'none'; toast('先选地区再检测'); return; }
   let idx = 0, doneN = 0, okN = 0;
   const total = lines.length;
   async function worker(){
@@ -595,7 +625,7 @@ async function scanPool(){
     : `已停止：测了 ${doneN}/${total}，可用 <b>${okN}</b> 个`;
   $('btnSelAvail').disabled = nRegionsOk === 0;
   scanning = false;
-  $('btnScan').disabled = false;
+  $('btnScan').disabled = false; $('btnScanSel').disabled = false;
   $('btnStop').style.display = 'none';
   updateSelInfo();
   if(RESULT.length) renderTable();
@@ -753,11 +783,11 @@ function buildSubUrl(stack6){
     if(rnParts.length) parts.push('rn=' + rnParts.join(','));
     if($('maxMs').value) parts.push('ms=' + $('maxMs').value);
     if($('minMbps').value) parts.push('mbps=' + $('minMbps').value);
-    if(carrierSel !== '全部') parts.push('carrier=' + encodeURIComponent(carrierSel));
+    if(carrierSet.size) parts.push('carrier=' + encodeURIComponent([...carrierSet].join(',')));
     if($('ports').value !== 'all') parts.push('ports=' + $('ports').value);
     if($('mode').value === 'random') parts.push('mode=random');
   }
-  if(FMT && FMT !== FMT_DEFAULT) parts.push('fmt=' + encodeURIComponent(FMT));
+  if(FMT !== FMT_DEFAULT) parts.push('fmt=' + encodeURIComponent(FMT));
   if($('subUi').value) parts.push('ui=' + $('subUi').value);
   return base + '?' + parts.join('&');
 }
@@ -771,7 +801,7 @@ function refreshAggNote(){
 function saveCfg(){
   try{
     const cfg = {r: [...selected], n: $('perN').value, rn: regionN,
-      ms: $('maxMs').value, mb: $('minMbps').value, ca: carrierSel,
+      ms: $('maxMs').value, mb: $('minMbps').value, ca: [...carrierSet],
       po: $('ports').value, mo: $('mode').value, oa: $('onlyAvail').checked};
     const s = btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
     history.replaceState(null, '', '#c=' + s);
@@ -786,8 +816,8 @@ function loadCfg(){
     if(cfg.rn) Object.assign(regionN, cfg.rn);
     if(cfg.ms) $('maxMs').value = cfg.ms;
     if(cfg.mb) $('minMbps').value = cfg.mb;
-    if(cfg.ca){ carrierSel = cfg.ca;
-      document.querySelectorAll('.carrier').forEach(b => b.classList.toggle('on', b.dataset.carrier === carrierSel)); }
+    if(cfg.ca){ carrierSet = new Set((Array.isArray(cfg.ca) ? cfg.ca : [cfg.ca]).filter(c => c !== '全部'));
+      syncCarrierChips(); }
     if(cfg.po) $('ports').value = cfg.po;
     if(cfg.mo) $('mode').value = cfg.mo;
     $('onlyAvail').checked = !!cfg.oa;
@@ -801,8 +831,10 @@ document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('clic
   renderChips(); updateSelInfo();
 }));
 document.querySelectorAll('.carrier').forEach(b => b.addEventListener('click', () => {
-  carrierSel = b.dataset.carrier;
-  document.querySelectorAll('.carrier').forEach(x => x.classList.toggle('on', x === b));
+  const c = b.dataset.carrier;
+  if(c === '全部') carrierSet.clear();
+  else carrierSet.has(c) ? carrierSet.delete(c) : carrierSet.add(c);
+  syncCarrierChips();
   renderChips(); updateSelInfo();
 }));
 $('perN').addEventListener('input', updateSelInfo);
@@ -812,7 +844,8 @@ $('ports').addEventListener('change', updateSelInfo);
 $('mode').addEventListener('change', updateSelInfo);
 $('onlyAvail').addEventListener('change', updateSelInfo);
 $('btnGen').addEventListener('click', generate);
-$('btnScan').addEventListener('click', scanPool);
+$('btnScan').addEventListener('click', () => scanPool('all'));
+$('btnScanSel').addEventListener('click', () => scanPool('sel'));
 $('btnStop').addEventListener('click', () => { scanning = false; });
 $('btnSelAvail').addEventListener('click', () => {
   if(!availByRegion) return;
@@ -978,8 +1011,8 @@ function renderVisitor(region, city, isp){
     b.style.display = '';
     b.textContent = `按我的运营商（${carrier}）筛选`;
     b.addEventListener('click', () => {
-      carrierSel = carrier;
-      document.querySelectorAll('.carrier').forEach(x => x.classList.toggle('on', x.dataset.carrier === carrier));
+      carrierSet = new Set([carrier]);
+      syncCarrierChips();
       renderChips(); updateSelInfo();
       toast(`已按 ${carrier} 筛选`);
     });
