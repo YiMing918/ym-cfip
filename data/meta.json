@@ -1,0 +1,224 @@
+{
+  "generated_at": "2026-11-06 16:36 CST",
+  "top": {
+    "count": 20,
+    "file": "data/top.txt"
+  },
+  "total": 927,
+  "v6_total": 45,
+  "domains_total": 36,
+  "groups": {
+    "best": {
+      "name": "高速优选",
+      "count": 30,
+      "file": "data/best.txt",
+      "note": "陕西移动实测里下载最快的一批，条数少、质量优先"
+    },
+    "full": {
+      "name": "全部可用",
+      "count": 414,
+      "file": "data/full.txt",
+      "note": "陕西移动实测全量池，条数多，自己再筛"
+    },
+    "usjp": {
+      "name": "美日精选",
+      "count": 350,
+      "file": "data/usjp.txt",
+      "note": "静态整理：日本 86 + 美国 264（2026-11-03 多源交叉汇编）"
+    },
+    "extra": {
+      "name": "全国补充",
+      "count": 227,
+      "file": "data/extra.txt",
+      "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径非陕西专测"
+    },
+    "all": {
+      "name": "合并总表",
+      "count": 927,
+      "file": "data/all.txt",
+      "note": "以上四组合并去重，一份拿全"
+    }
+  },
+  "regions": {
+    "US": 296,
+    "JP": 97,
+    "SG": 59,
+    "HK": 45,
+    "DE": 29,
+    "KR": 25,
+    "GB": 16,
+    "NL": 15,
+    "FI": 13,
+    "TW": 13,
+    "LV": 12,
+    "EE": 12,
+    "IN": 10,
+    "AU": 10,
+    "FR": 10,
+    "CH": 10,
+    "AT": 10,
+    "CA": 10,
+    "SE": 10,
+    "PL": 10,
+    "LT": 10,
+    "TR": 10,
+    "CZ": 10,
+    "IT": 10,
+    "BG": 10,
+    "RO": 10,
+    "MD": 10,
+    "RU": 10,
+    "KZ": 10,
+    "DK": 10,
+    "ES": 10,
+    "AE": 9,
+    "MY": 8,
+    "NO": 6,
+    "TH": 5,
+    "IS": 5,
+    "RS": 5,
+    "MX": 4,
+    "AM": 4,
+    "BE": 4,
+    "IL": 4,
+    "GR": 4,
+    "CN": 3,
+    "VN": 3,
+    "CL": 3,
+    "DO": 3,
+    "CY": 3,
+    "IE": 3,
+    "AL": 3,
+    "UA": 3,
+    "BR": 3,
+    "ID": 2,
+    "HU": 2,
+    "GE": 2,
+    "PT": 2,
+    "SA": 2,
+    "AR": 1,
+    "OM": 1,
+    "PH": 1,
+    "NZ": 1,
+    "AZ": 1,
+    "BY": 1,
+    "KH": 1,
+    "PK": 1,
+    "KG": 1,
+    "EG": 1
+  },
+  "sources": [
+    {
+      "name": "陕西移动实测 · 高速优选",
+      "url": "https://ips.gaoji.uk/best_ips.txt",
+      "ok": true,
+      "lines_in": 30,
+      "lines_used": 30,
+      "note": "svip-s/cloudflare_ip，测试地陕西移动，源站整点更新"
+    },
+    {
+      "name": "陕西移动实测 · 全部可用",
+      "url": "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/full_ips.txt",
+      "ok": true,
+      "lines_in": 419,
+      "lines_used": 414,
+      "note": "同上，全量可用池"
+    },
+    {
+      "name": "美日精选（静态整理）",
+      "url": "",
+      "ok": true,
+      "lines_in": 350,
+      "lines_used": 350,
+      "note": "2026-11-03 多源交叉整理，JP 86 + US 264"
+    },
+    {
+      "name": "微测优选",
+      "url": "https://bestcf.tools12345.com/wetest/ipv4.txt",
+      "ok": true,
+      "lines_in": 17,
+      "lines_used": 15,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "CFYes 优选",
+      "url": "https://bestcf.tools12345.com/cfyes/ipv4.txt",
+      "ok": true,
+      "lines_in": 17,
+      "lines_used": 0,
+      "note": "全国源补充；17 条无地区标注已剔除"
+    },
+    {
+      "name": "麒麟优选",
+      "url": "https://bestcf.tools12345.com/uouin/all.txt",
+      "ok": true,
+      "lines_in": 42,
+      "lines_used": 0,
+      "note": "全国源补充；42 条无地区标注已剔除"
+    },
+    {
+      "name": "CM 优选",
+      "url": "https://bestcf.tools12345.com/cmliu/all.txt",
+      "ok": true,
+      "lines_in": 34,
+      "lines_used": 32,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "CM 优选 2",
+      "url": "https://bestcf.tools12345.com/cmliu2/all.txt",
+      "ok": true,
+      "lines_in": 902,
+      "lines_used": 0,
+      "note": "全国源补充；17 条无地区标注已剔除"
+    },
+    {
+      "name": "辣椒优选",
+      "url": "https://bestcf.tools12345.com/lajiao/all.txt",
+      "ok": true,
+      "lines_in": 131,
+      "lines_used": 129,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "洛璃优选",
+      "url": "https://bestcf.tools12345.com/luoli/all.txt",
+      "ok": true,
+      "lines_in": 33,
+      "lines_used": 31,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "Mia 优选",
+      "url": "https://bestcf.tools12345.com/xinyitang3/ipv4.txt",
+      "ok": true,
+      "lines_in": 22,
+      "lines_used": 20,
+      "note": "全国源补充；2 条无地区标注已剔除"
+    },
+    {
+      "name": "CFYes IPv6",
+      "url": "https://bestcf.tools12345.com/cfyes/ipv6.txt",
+      "ok": true,
+      "lines_in": 17,
+      "lines_used": 15,
+      "note": "IPv6 源（半小时更新），源不带地区标注"
+    },
+    {
+      "name": "vvHan IPv6",
+      "url": "https://bestcf.tools12345.com/vvhan/ipv6.txt",
+      "ok": true,
+      "lines_in": 32,
+      "lines_used": 30,
+      "note": "IPv6 源（半小时更新），源不带地区标注"
+    },
+    {
+      "name": "优选域名（svip-s）",
+      "url": "https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/domain.txt",
+      "ok": true,
+      "lines_in": 36,
+      "lines_used": 36,
+      "note": "大厂 CF 域名，可作优选域名/回退入口"
+    }
+  ]
+}
