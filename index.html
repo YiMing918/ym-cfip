@@ -295,6 +295,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <button class="btn primary" id="btnDomTest">⚡ 批量实测</button>
     <button class="btn" id="btnDomCopy">复制全部域名</button>
     <button class="btn" id="btnDomLink">复制聚合直链</button>
+    <button class="btn" id="btnDomOk" disabled>只复制可达的</button>
     <span class="selinfo" id="domininfo"></span>
   </div>
   <div class="stats" id="domstats" style="margin:8px 0 0"></div>
@@ -785,6 +786,7 @@ function renderTop(lines){
   document.querySelectorAll('#toprows .addr').forEach(el =>
     el.addEventListener('click', () => copyText(el.dataset.line, '已复制：' + el.dataset.line)));
 }
+let DOMRES = null;
 function renderDomStats(){
   const bySrc = {};
   DOMAINS.forEach(d => {
@@ -794,7 +796,8 @@ function renderDomStats(){
   $('domstats').innerHTML = `<span class="chip">共 <b>${DOMAINS.length}</b> 个</span>` +
     Object.entries(bySrc).sort((a, b) => b[1] - a[1])
       .map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('') +
-    (META && META.domains_screened ? `<span class="chip">本轮解析筛除 <b>${META.domains_screened}</b> 个</span>` : '');
+    (META && META.domains_screened ? `<span class="chip">本轮解析筛除 <b>${META.domains_screened}</b> 个</span>` : '') +
+    (DOMRES ? `<span class="chip">本地实测可达 <b>${DOMRES.ok}</b> · 不可达 <b>${DOMRES.total - DOMRES.ok}</b></span>` : '');
 }
 function renderDomains(){
   $('domlist').innerHTML = DOMAINS.map((d, i) =>
@@ -858,6 +861,9 @@ async function testDomains(){
   }
   await Promise.all(Array.from({length: 6}, worker));
   const ok = results.map((r, i) => ({...r, dom: DOMAINS[i].dom})).filter(r => r.ms >= 0);
+  DOMRES = {ok: ok.length, total, list: ok.slice().sort((a, b) => a.ms - b.ms)};
+  $('btnDomOk').disabled = ok.length === 0;
+  renderDomStats();
   let summary = `实测完成：可达 <b>${ok.length}</b>/${total} · 不可达 ${total - ok.length}`;
   if(ok.length){
     const fastest = ok.reduce((a, b) => (b.ms < a.ms ? b : a));
@@ -872,6 +878,7 @@ async function testDomains(){
   $('domininfo').innerHTML = summary;
   btn.disabled = false;
 }
+let V6RES = null;
 function v6TagOf(l){
   const m = l.match(/#\S+\s*\[(.+)\]\s*$/);
   return m ? m[1] : '';
@@ -891,7 +898,8 @@ function renderV6Stats(){
     Object.entries(bySrc).sort((a, b) => b[1] - a[1])
       .map(([k, v]) => `<span class="chip">来源 ${k} <b>${v}</b></span>`).join('') +
     Object.entries(byCar).sort((a, b) => b[1] - a[1])
-      .map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
+      .map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('') +
+    (V6RES ? `<span class="chip">本地检测可用 <b>${V6RES.ok}</b>/${V6RES.total}（${V6RES.total ? Math.round(V6RES.ok / V6RES.total * 100) : 0}%）</span>` : '');
 }
 function renderV6(){
   $('v6count').textContent = `（共 ${POOL6.length} 条）`;
@@ -931,6 +939,8 @@ async function scanV6(){
   });
   const carStr = Object.entries(perCar).sort((a, b) => b[1][1] - a[1][1])
     .map(([c, [o, t]]) => `${c} ${o}/${t}`).join(' · ');
+  V6RES = {ok: okN, total};
+  renderV6Stats();
   $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 可用（${total ? Math.round(okN / total * 100) : 0}%）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
@@ -1405,6 +1415,11 @@ $('btnDomLink').addEventListener('click', () =>
   copyText(new URL('data/domains.txt', location.href).href, '已复制优选域名聚合直链（随每轮聚合自动更新）'));
 $('btnDomCopy').addEventListener('click', () =>
   copyText(DOMAINS.map(d => d.dom).join('\n'), `已复制 ${DOMAINS.length} 个域名`));
+$('btnDomOk').addEventListener('click', () => {
+  if(!DOMRES || !DOMRES.list.length) return;
+  copyText(DOMRES.list.map(r => r.dom).join('\n'),
+    `已复制 ${DOMRES.list.length} 个实测可达域名（按延迟从低到高）`);
+});
 $('btnV6Scan').addEventListener('click', scanV6);
 $('btnV6Copy').addEventListener('click', () => copyText(formatLines(POOL6).join('\n'), `已复制 IPv6 ${POOL6.length} 条`));
 $('btnV6CopyOk').addEventListener('click', () => {
