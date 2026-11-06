@@ -864,6 +864,11 @@ async function testDomains(){
   DOMRES = {ok: ok.length, total, list: ok.slice().sort((a, b) => a.ms - b.ms)};
   $('btnDomOk').disabled = ok.length === 0;
   renderDomStats();
+  try{
+    localStorage.setItem('cfipDomRes', JSON.stringify({
+      gen: META ? META.generated_at : '',
+      total, list: DOMRES.list.map(r => [r.dom, r.ms])}));
+  }catch(e){}
   let summary = `实测完成：可达 <b>${ok.length}</b>/${total} · 不可达 ${total - ok.length}`;
   if(ok.length){
     const fastest = ok.reduce((a, b) => (b.ms < a.ms ? b : a));
@@ -941,6 +946,10 @@ async function scanV6(){
     .map(([c, [o, t]]) => `${c} ${o}/${t}`).join(' · ');
   V6RES = {ok: okN, total};
   renderV6Stats();
+  try{
+    localStorage.setItem('cfipV6Res', JSON.stringify({
+      gen: META ? META.generated_at : '', lat6}));
+  }catch(e){}
   $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 可用（${total ? Math.round(okN / total * 100) : 0}%）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
@@ -1452,7 +1461,7 @@ $('btnTopLink').addEventListener('click', () =>
     `<span class="chip">全球池 <b>${META.total}</b> 条</span>` +
     `<span class="chip">覆盖 <b>${Object.keys(META.regions || {}).filter(k => k !== 'SW').length}</b> 个地区</span>` +
     `<span class="chip">IPv6 <b>${META.v6_total || 0}</b> 条</span>` +
-    `<span class="chip">优选域名 <b>${META.domains_total || 0}</b> 个</span>` +
+    `<span class="chip">优选域名 <b id="statDomN">${META.domains_total || 0}</b> 个</span>` +
     `<span class="chip">数据源 <b>${META.sources.filter(s=>s.ok).length}/${META.sources.length}</b> 正常</span>` +
     `<span class="chip">更新于 <b>${META.generated_at}</b></span>`;
   $('links').innerHTML =
@@ -1507,10 +1516,38 @@ $('btnTopLink').addEventListener('click', () =>
     const carrierDoms = new Set(CARRIER_DOMAINS.map(d => d.dom));
     DOMAINS = [...CARRIER_DOMAINS, ...list.filter(d => !carrierDoms.has(d.dom))];
     renderDomains();
+    // 页眉域名数与卡片同口径：列表总数（含 3 个社区分流域名）
+    const sdn = $('statDomN');
+    if(sdn) sdn.textContent = DOMAINS.length;
+    // 恢复本轮数据（generated_at 未变）下的上次实测结果，刷新不丢
+    try{
+      const saved = JSON.parse(localStorage.getItem('cfipDomRes') || 'null');
+      if(saved && META && saved.gen === META.generated_at && saved.list){
+        DOMRES = {ok: saved.list.length, total: saved.total,
+                  list: saved.list.map(([dom, ms]) => ({dom, ms}))};
+        $('btnDomOk').disabled = DOMRES.ok === 0;
+        DOMRES.list.forEach(r => {
+          const i = DOMAINS.findIndex(d => d.dom === r.dom);
+          const el = i >= 0 ? $(`domlat${i}`) : null;
+          if(el){ el.textContent = `${r.ms} ms`; el.className = `lat ${r.ms<200?'good':r.ms<600?'mid':'bad'}`; }
+        });
+        $('domininfo').textContent = `已恢复本轮数据的上次实测：可达 ${DOMRES.ok} · 不可达 ${DOMRES.total - DOMRES.ok}（重新实测可刷新）`;
+      }
+    }catch(e){}
     renderDomStats();
   }).catch(() => { DOMAINS = [...CARRIER_DOMAINS]; renderDomains(); renderDomStats(); });
   getText('data/all6.txt').then(t => {
     POOL6 = t.split('\n').map(s => s.trim()).filter(Boolean);
+    try{
+      const saved = JSON.parse(localStorage.getItem('cfipV6Res') || 'null');
+      if(saved && META && saved.gen === META.generated_at && saved.lat6){
+        Object.assign(lat6, saved.lat6);
+        const ok = POOL6.filter(l => lat6[l.match(/^\[[^\]]+\]:\d+/)[0]] >= 0).length;
+        V6RES = {ok, total: POOL6.length};
+        $('btnV6CopyOk').disabled = ok === 0;
+        $('v6info').textContent = `已恢复本轮数据的上次检测：可用 ${ok}/${POOL6.length}（重新检测可刷新）`;
+      }
+    }catch(e){}
     renderV6();
     renderV6Stats();
   }).catch(() => {});
