@@ -1,23 +1,23 @@
 {
-  "generated_at": "2026-11-11 00:08 CST",
+  "generated_at": "2026-11-11 02:08 CST",
   "top": {
     "count": 20,
     "file": "data/top.txt"
   },
-  "total": 1317,
-  "v6_total": 111,
+  "total": 1363,
+  "v6_total": 109,
   "domains_total": 918,
   "domains_screened": 16,
   "groups": {
     "best": {
       "name": "高速优选",
-      "count": 37,
+      "count": 34,
       "file": "data/best.txt",
       "note": "实测源里下载最快的一批，条数少、质量优先"
     },
     "full": {
       "name": "全部可用",
-      "count": 398,
+      "count": 403,
       "file": "data/full.txt",
       "note": "实测源全量池，条数多，自己再筛"
     },
@@ -29,7 +29,7 @@
     },
     "extra": {
       "name": "全国补充",
-      "count": 648,
+      "count": 646,
       "file": "data/extra.txt",
       "note": "微测 / CFYes / 麒麟 / CM / 辣椒 / 洛璃 / Mia 等源合并去重，全国口径，非单地区专测"
     },
@@ -41,7 +41,7 @@
     },
     "all": {
       "name": "合并总表",
-      "count": 1317,
+      "count": 1363,
       "file": "data/all.txt",
       "note": "以上各组合并去重，一份拿全"
     },
@@ -53,90 +53,89 @@
     }
   },
   "regions": {
-    "US": 466,
-    "JP": 130,
-    "SG": 92,
+    "US": 477,
+    "JP": 133,
+    "SG": 98,
+    "HK": 66,
+    "DE": 63,
     "SW": 63,
-    "HK": 60,
-    "DE": 51,
-    "KR": 47,
-    "NL": 41,
-    "GB": 19,
-    "FI": 15,
-    "TW": 14,
+    "KR": 52,
+    "NL": 35,
+    "GB": 18,
+    "TW": 15,
+    "LV": 14,
     "FR": 13,
-    "LV": 12,
+    "FI": 13,
+    "IN": 11,
     "CZ": 11,
-    "EE": 11,
-    "BG": 11,
+    "LT": 11,
+    "KZ": 11,
     "SE": 11,
-    "MY": 10,
-    "IN": 10,
+    "AE": 10,
     "AU": 10,
+    "MY": 10,
     "LA": 10,
-    "RO": 10,
-    "AT": 10,
-    "IT": 10,
-    "CH": 10,
     "PL": 10,
-    "DK": 10,
+    "CH": 10,
+    "AT": 10,
+    "EE": 10,
+    "RU": 10,
+    "BG": 10,
     "CA": 10,
-    "KZ": 10,
+    "RO": 10,
     "ES": 10,
     "TR": 10,
-    "RU": 10,
-    "LT": 9,
-    "AE": 7,
-    "MD": 7,
+    "DK": 10,
+    "IT": 10,
+    "MD": 8,
     "TH": 6,
+    "BR": 6,
     "DO": 6,
-    "MX": 5,
+    "ID": 5,
+    "IS": 5,
     "IE": 5,
-    "BR": 4,
+    "NO": 4,
+    "MX": 4,
     "BE": 4,
-    "UA": 4,
-    "CY": 4,
     "RS": 4,
-    "VN": 3,
+    "CY": 4,
     "CN": 3,
-    "ID": 3,
     "AM": 3,
-    "NO": 3,
-    "IS": 3,
+    "UA": 3,
+    "VN": 2,
     "IL": 2,
     "BY": 2,
-    "GE": 2,
+    "AL": 2,
     "CL": 2,
     "OM": 1,
-    "PH": 1,
-    "PT": 1,
+    "HU": 1,
     "AZ": 1,
+    "PT": 1,
     "KG": 1,
-    "ZA": 1,
-    "NZ": 1,
     "GR": 1,
-    "AL": 1
+    "GE": 1,
+    "ZA": 1
   },
   "sources": [
     {
       "name": "实测源 · 高速优选",
       "url": "https://ips.gaoji.uk/best_ips.txt",
       "ok": true,
-      "lines_in": 37,
-      "lines_used": 37,
+      "lines_in": 34,
+      "lines_used": 34,
       "note": "svip-s/cloudflare_ip，单地区运营商网络实测，源站整点更新",
       "cadence": "整点更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "实测源 · 全部可用",
       "url": "https://ips.gaoji.uk/full_ips.txt",
       "ok": true,
-      "lines_in": 408,
-      "lines_used": 398,
+      "lines_in": 413,
+      "lines_used": 403,
       "note": "同上，全量可用池",
       "cadence": "整点更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "美日精选（静态整理）",
@@ -156,7 +155,7 @@
       "lines_used": 15,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "CFYes 优选",
@@ -166,7 +165,7 @@
       "lines_used": 15,
       "note": "全国源补充；2 条无地区标注已剔除；另 15 条无地区但带运营商实测，收进三网专区",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "麒麟优选",
@@ -176,7 +175,7 @@
       "lines_used": 30,
       "note": "全国源补充；12 条无地区标注已剔除；另 30 条无地区但带运营商实测，收进三网专区",
       "cadence": "约 10 分钟",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "CM 优选",
@@ -186,7 +185,7 @@
       "lines_used": 32,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "CM 优选 2",
@@ -196,7 +195,7 @@
       "lines_used": 14,
       "note": "全国源补充；3 条无地区标注已剔除；另 14 条无地区但带运营商实测，收进三网专区；源文件另混有网页代码，相关行已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "辣椒优选",
@@ -206,7 +205,7 @@
       "lines_used": 129,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "洛璃优选",
@@ -216,7 +215,7 @@
       "lines_used": 31,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "Mia 优选",
@@ -226,7 +225,7 @@
       "lines_used": 9,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "天诚优选",
@@ -236,7 +235,7 @@
       "lines_used": 66,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "一天三次",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "天诚优选 2",
@@ -246,7 +245,7 @@
       "lines_used": 67,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "一天三次",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "vvHan 优选",
@@ -256,7 +255,7 @@
       "lines_used": 30,
       "note": "全国源补充；2 条无地区标注已剔除；另 15 条无地区但带运营商实测，收进三网专区",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "NiREvil 优选",
@@ -266,7 +265,7 @@
       "lines_used": 35,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "每日更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "S5 公益",
@@ -276,7 +275,7 @@
       "lines_used": 50,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "一天三次",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "Joname 优选",
@@ -286,7 +285,7 @@
       "lines_used": 99,
       "note": "全国源补充；0 条无地区标注已剔除",
       "cadence": "约 4 小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "辣子鸡优选",
@@ -296,7 +295,7 @@
       "lines_used": 50,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "Kristi 优选",
@@ -306,7 +305,7 @@
       "lines_used": 35,
       "note": "全国源补充；2 条无地区标注已剔除",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "MJZ 优选",
@@ -316,7 +315,7 @@
       "lines_used": 12,
       "note": "全国源补充；0 条无地区标注已剔除",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "love-ztm 优选",
@@ -326,17 +325,17 @@
       "lines_used": 3,
       "note": "全国源补充；0 条无地区标注已剔除",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "yuanxiawan 优选",
       "url": "https://raw.githubusercontent.com/yuanxiawan/cfipv4db/refs/heads/main/cfip.txt",
       "ok": true,
       "lines_in": 15,
-      "lines_used": 14,
+      "lines_used": 11,
       "note": "全国源补充；0 条无地区标注已剔除；源格式已变化，本站以「兼容扫描」兼容解析自动适配",
       "cadence": "每日更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "ahang39 优选",
@@ -346,7 +345,7 @@
       "lines_used": 5,
       "note": "全国源补充；0 条无地区标注已剔除",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "CFYes IPv6",
@@ -356,7 +355,7 @@
       "lines_used": 15,
       "note": "IPv6 源，源不带地区标注",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "vvHan IPv6",
@@ -366,7 +365,7 @@
       "lines_used": 30,
       "note": "IPv6 源，源不带地区标注",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "微测 IPv6",
@@ -376,7 +375,7 @@
       "lines_used": 20,
       "note": "IPv6 源，源不带地区标注；本轮走原头 API 直连",
       "cadence": "半小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "NiREvil IPv6",
@@ -386,7 +385,7 @@
       "lines_used": 5,
       "note": "IPv6 源，源不带地区标注",
       "cadence": "每日更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "Joname IPv6",
@@ -396,7 +395,7 @@
       "lines_used": 41,
       "note": "IPv6 源，源不带地区标注",
       "cadence": "约 4 小时更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（svip-s）",
@@ -406,7 +405,7 @@
       "lines_used": 36,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "整点更新",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（BestCF 全量）",
@@ -416,7 +415,7 @@
       "lines_used": 77,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（BestCF 亚洲）",
@@ -426,7 +425,7 @@
       "lines_used": 83,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（cf-nodes）",
@@ -436,7 +435,7 @@
       "lines_used": 60,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 仓库维护",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（cmliu 官方）",
@@ -446,7 +445,7 @@
       "lines_used": 426,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 投稿合并",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（BestCF 高访问量）",
@@ -456,7 +455,7 @@
       "lines_used": 305,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（甬哥）",
@@ -466,7 +465,7 @@
       "lines_used": 13,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（秋名山）",
@@ -476,7 +475,7 @@
       "lines_used": 7,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（Senflare）",
@@ -486,7 +485,7 @@
       "lines_used": 4,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     },
     {
       "name": "优选域名（IRCF）",
@@ -496,7 +495,7 @@
       "lines_used": 30,
       "note": "优选域名源，与其他域名源合并去重",
       "cadence": "不定期 · 随源站",
-      "fetched_at": "00:08"
+      "fetched_at": "02:08"
     }
   ],
   "fallback_sources": []
