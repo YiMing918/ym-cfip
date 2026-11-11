@@ -129,6 +129,25 @@
 ![真实后台：SNAP 绑定](https://gcore.jsdelivr.net/gh/YiMing918/ym-cfip@main/docs/cf-cfip-bind.png)
 *绑好的样子（真实截图）：绑定表里一行 KV 命名空间，名称正好是 SNAP（图中 ①）。*
 
+**路线 B：令牌直推（Pages 连不上 Git 时用，与上面的连接 Git 路线二选一）**
+
+什么时候用：你的 GitHub 已经被另一个 Cloudflare 账号绑过（新账号点「连接 GitHub」总跳回设置页、看不到仓库），或者你就是不想连 Git。原理是仓库工作流在每轮聚合后，用你存在仓库里的部署令牌把最新站点直接推送到你的 Pages 项目，效果与连 Git 一致：
+
+1. **先直传建项目**：Cloudflare 控制台 → Workers 和 Pages → 创建 → Pages → 上传资产，把仓库文件打包传上去（至少含 `index.html`、`_headers`、`functions/`、`data/`），项目名必须叫 **`ym-cfip`**——工作流推送时按这个名字找项目，名字对不上就推不过去。
+2. **建部署令牌**：Cloudflare → 我的个人资料 → API 令牌 → 创建令牌 → 自定义令牌，给「账户 → Cloudflare Pages → 编辑」权限；记下令牌值，再记下目标账号的**账号 ID**（控制台域名概览页右侧能看到）。
+3. **存进仓库 Secrets（仓库密钥）**：到你 Fork 的仓库 → Settings → Secrets and variables → Actions → New repository secret，建两个：`CLOUDFLARE_API_TOKEN` 填令牌值、`CLOUDFLARE_ACCOUNT_ID` 填账号 ID。
+
+![新建 Secret 表单](https://gcore.jsdelivr.net/gh/YiMing918/ym-cfip@main/docs/gh-secret-form.png)
+*新建 Secret 的表单：① Name 填密钥名 ② Secret 填值 ③ 点 Add secret 保存，值之后谁也看不到。*
+
+![Secrets 名单](https://gcore.jsdelivr.net/gh/YiMing918/ym-cfip@main/docs/gh-cfip-secrets.png)
+*两个密钥加完的样子：名单只显示名字（图中 ②）；加新的点右上绿按钮（图中 ①）。*
+
+4. **启用 Actions**：同上面第 4 步（Fork 默认关闭，要手动启用一次）。之后每轮聚合结束，工作流都会自动把最新页面 + 数据推送部署——你改了页面代码，也会随下一轮聚合自动上线，不用手动重传。
+5. **KV 照旧手动绑**：快照订阅要的 `SNAP` 绑定，就在这个直传项目上照上面第 5 步做，令牌路线不会替你绑 KV。
+
+> 没配这两个 Secrets 时，工作流的「推送部署」步会自动跳过、聚合与数据提交照常——走连接 Git 路线的人不用配，也不用管这一步。
+
 部署完成后：
 - 站点首页即优选清单工具；`/sub?...` 订阅端点由 `functions/sub.js` 提供，Pages 自动生效，无需额外配置。
 - 想改聚合频率：编辑 `.github/workflows/update.yml` 的 cron（默认每 2 小时，`20 */2 * * *`）。
@@ -244,7 +263,7 @@
 
 代码与原站一模一样，自动更新的能力全在工作流里；Fork 后暂时用不上，是 GitHub 的安全规则让「现成配置」不能跟着 Fork 走：
 
-1. **Secrets 不复制**：原仓库的部署令牌、账号 ID 不会跟到 Fork。走令牌直推部署的，要在自己 Fork 的 Settings → Secrets 里配 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`（只用 Git 连接部署的可跳过，没配时推送步骤会自动略过；已配令牌时每轮聚合都会把仓库最新页面一并推送部署，改了页面代码也会随下一轮聚合自动上线）。
+1. **Secrets 不复制**：原仓库的部署令牌、账号 ID 不会跟到 Fork。走令牌直推部署的，要在自己 Fork 的 Settings → Secrets 里配 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`（只用 Git 连接部署的可跳过，没配时推送步骤会自动略过；已配令牌时每轮聚合都会把仓库最新页面一并推送部署，改了页面代码也会随下一轮聚合自动上线）。这条路线的完整配法见上方[快速部署](#快速部署)的「路线 B：令牌直推」。
 2. **Actions 默认关闭、定时任务默认不跑**：Fork 后必须去仓库 **Actions** 页手动启用 `聚合优选 IP 数据` 工作流一次，它才会每 2 小时自动聚合——这是「不自动更新」的头号原因。
 3. **60 天规则**：公开仓库 60 天无活动，定时工作流会被 GitHub 自动停用；本工作流带心跳保活步，正常聚合的提交也不会让它触发，长期关停后回来重新启用即可。
 4. **云端资源自己建**：快照订阅用的 KV 命名空间在部署者自己的 Cloudflare 账号里，Pages 绑定变量名必须为 `SNAP`。
@@ -286,13 +305,7 @@ A：Fork 的仓库默认禁用 Actions，到仓库 Actions 页手动启用；另
 A：可以。编辑 `seed-usjp.txt` 加静态条目；或改 `scripts/aggregate.py` 的源列表加新源（需能解析出地区）。
 
 **Q：新 Cloudflare 账号点「连接 GitHub」一直跳回应用设置页，看不到仓库？**
-A：GitHub 上的「Cloudflare Workers and Pages」应用只能绑定一个 Cloudflare 账号。若你的 GitHub 已绑过另一个 CF 账号，新账号就连不上（卸载重装会断开旧账号项目的 Git 部署，慎重）。解法：新账号改用「直接上传」建 Pages 项目，再到新账号创建一个 Pages 编辑权限的 API 令牌，与账号 ID 一起存入仓库 Secrets（`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`），本仓工作流会在每次聚合后自动把最新站点推送部署上去，效果与连 Git 一致。
-
-![新建 Secret 表单](https://gcore.jsdelivr.net/gh/YiMing918/ym-cfip@main/docs/gh-secret-form.png)
-*新建 Secret 的表单：① Name 填密钥名 ② Secret 填值 ③ 点 Add secret 保存，值之后谁也看不到。*
-
-![Secrets 名单](https://gcore.jsdelivr.net/gh/YiMing918/ym-cfip@main/docs/gh-cfip-secrets.png)
-*两个密钥加完的样子：名单只显示名字（图中 ②）；加新的点右上绿按钮（图中 ①）。*
+A：GitHub 上的「Cloudflare Workers and Pages」应用只能绑定一个 Cloudflare 账号。若你的 GitHub 已绑过另一个 CF 账号，新账号就连不上（卸载重装会断开旧账号项目的 Git 部署，慎重）。解法是走**令牌直推**：完整步骤已整合到上方[快速部署](#快速部署)的「路线 B：令牌直推」小节（先直传建一个名为 `ym-cfip` 的项目，再配两个 Secrets），照着做即可，这里不再重复。
 
 **Q：Fork 后工作流里「推送部署」那步需要我处理吗？**
 A：不需要。没配上述两个 Secrets 时该步自动跳过，聚合与数据提交照常；连 Git 部署的用户本来也用不到它。

@@ -100,21 +100,21 @@ function lineOk(l) {
 export async function onRequestPost(context) {
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-cache" };
   if (!context.env || !context.env.SNAP)
-    return new Response(JSON.stringify({ error: "snapshot storage not configured" }), { status: 501, headers });
+    return new Response(JSON.stringify({ error: "snapshot storage not configured（快照存储未配置：本站未绑定 SNAP KV）" }), { status: 501, headers });
   const body = await context.request.json().catch(() => null);
   const text = body && typeof body.text === "string" ? body.text : "";
   const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
   if (!lines.length || lines.length > 5000 || text.length > 300000)
-    return new Response(JSON.stringify({ error: "invalid list" }), { status: 400, headers });
+    return new Response(JSON.stringify({ error: "invalid list（清单无效：为空或条数/长度超限）" }), { status: 400, headers });
   if (!lines.every(l => lineOk(l)))
-    return new Response(JSON.stringify({ error: "invalid line format" }), { status: 400, headers });
+    return new Response(JSON.stringify({ error: "invalid line format（清单里有行格式不对）" }), { status: 400, headers });
   // 每来源 IP 每日保存上限（防刷爆 KV 写入额度）：计数 key rl:save:<ip>:<yyyy-mm-dd>
   const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
   const day = new Date().toISOString().slice(0, 10);
   const rlKey = "rl:save:" + ip + ":" + day;
   const used = parseInt((await context.env.SNAP.get(rlKey)) || "0", 10) || 0;
   if (used >= 100)
-    return new Response(JSON.stringify({ error: "daily save limit reached" }), { status: 429, headers });
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
   const id = newId();
   await context.env.SNAP.put("snap:" + id, lines.join("\n") + "\n", { expirationTtl: 180 * 24 * 3600 });
   await context.env.SNAP.put(rlKey, String(used + 1), { expirationTtl: 2 * 24 * 3600 });
