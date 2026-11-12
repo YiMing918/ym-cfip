@@ -1321,7 +1321,7 @@ $('recheckCustom').addEventListener('input', saveRecheck);
 $('btnRecheck').addEventListener('click', async () => {
   const url = resolveRecheckUrl();
   if(!url){ toast('先在下方填好自定义监测站地址'); return; }
-  await copyText(RESULT.join('\n'), '已复制清单，去复检站核对');
+  await copyText(formatLines(RESULT).join('\n'), '已复制清单，去复检站核对');
   window.open(url, '_blank');
 });
 $('vbarClose').addEventListener('click', () => { $('visitorbar').style.display = 'none'; });
@@ -1433,7 +1433,7 @@ $('btnDomOk').addEventListener('click', () => {
 $('btnV6Scan').addEventListener('click', scanV6);
 $('btnV6Copy').addEventListener('click', () => copyText(formatLines(POOL6).join('\n'), `已复制 IPv6 ${POOL6.length} 条`));
 $('btnV6CopyOk').addEventListener('click', () => {
-  const ok = POOL6.filter(l => { const k = l.match(/^\[[^\]]+\]:\d+/)[0]; return lat6[k] !== undefined && lat6[k] >= 0; });
+  const ok = POOL6.filter(l => { const k = (l.match(/^\[[^\]]+\]:\d+/) || [l])[0]; return lat6[k] !== undefined && lat6[k] >= 0; });
   copyText(formatLines(ok).join('\n'), `已复制可用 IPv6 ${ok.length} 条`);
 });
 $('btnV6Sub').addEventListener('click', () => copyText(buildSubUrl(true), '已复制 IPv6 订阅链接'));
