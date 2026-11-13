@@ -1,10 +1,11 @@
 // POST /save {text} → {id, url}：把访客当前清单存为快照订阅（KV: SNAP）
 // 快照是定格版（可含本地测通筛选），不随聚合变化；保留 180 天；链接即凭证（内容本就是公开 IP 清单）。
+// id 由内容 SHA-256 派生（同内容同 id）：重复保存直接返回已有链接、零写入，
+// 既省 KV 写额度，也让「同一份清单永远同一个链接」。
 const ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
-function newId() {
-  const a = new Uint8Array(10);
-  crypto.getRandomValues(a);
-  return [...a].map(x => ALPHABET[x % ALPHABET.length]).join("");
+async function contentId(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf).slice(0, 10)].map(x => ALPHABET[x % ALPHABET.length]).join("");
 }
 // 与聚合脚本 aggregate.py 同口径校验：只收全球单播地址。
 // v4：逐段判范围之外，再拦环回/内网/链路本地/运营商级 NAT/组播/保留/
@@ -77,6 +78,7 @@ function validIPv6Global(ip) {
   if ((g0 & 0xfe00) === 0xfc00) return false;                         // fc00::/7 ULA
   if ((g0 & 0xff00) === 0xff00) return false;                         // ff00::/8 组播
   if (g0 === 0x2001 && g[1] === 0x0db8) return false;                 // 2001:db8::/32 文档示例
+  if (g0 === 0x2001 && g[1] === 0x0000) return false;                 // 2001::/32 Teredo（与聚合端 is_global 口径一致）
   if (g0 === 0x2001 && g[1] === 0x0002) return false;                 // 2001:2::/48 基准测试
   if (g0 === 0x0100 && g[1] === 0 && g[2] === 0 && g[3] === 0) return false; // 100::/64 丢弃段
   if (g.slice(0, 5).every(x => x === 0) && g[5] === 0xffff)           // v4 映射地址看内嵌 v4
@@ -88,12 +90,17 @@ function validPort(port) {
   return /^[0-9]+$/.test(port) && port.length <= 5
     && Number(port) > 0 && Number(port) <= 65535;
 }
-const LINE_RE = /^(\[([0-9a-fA-F:.]+)\]|(\d{1,3}(?:\.\d{1,3}){3})):(\d+)(#.*)?$/;
+const LINE_RE = /^(\[([0-9a-fA-F:.]+)\]|(\d{1,3}(?:\.\d{1,3}){3})):(\d+)(#(.*))?$/;
+// # 后缀必须是本站自己的标注语法（#地区序号 + 可选 [来源标签]）：此前 #.*
+// 不限内容，等于允许在本域名下托管任意文本（/s/<id> 以 text/plain 公开
+// 读出）。标签内只许文字/数字/常见标点并限长，尖括号与控制字符一律拒绝。
+const LABEL_RE = /^([A-Z]{2}\d*|IPv6\d*|SW\d*)( \[[^\[\]<>]{0,60}\])?$/;
 function lineOk(l) {
   const m = l.match(LINE_RE);
   if (!m) return false;
   if (m[3] !== undefined && !validIPv4(m[3])) return false;
   if (m[2] !== undefined && !validIPv6Global(m[2])) return false;
+  if (m[6] !== undefined && !LABEL_RE.test(m[6])) return false;
   return validPort(m[4]);
 }
 
@@ -108,15 +115,25 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: "invalid list（清单无效：为空或条数/长度超限）" }), { status: 400, headers });
   if (!lines.every(l => lineOk(l)))
     return new Response(JSON.stringify({ error: "invalid line format（清单里有行格式不对）" }), { status: 400, headers });
-  // 每来源 IP 每日保存上限（防刷爆 KV 写入额度）：计数 key rl:save:<ip>:<yyyy-mm-dd>
+  const stored = lines.join("\n") + "\n";
+  const id = await contentId(stored);
+  // 同内容已存过：直接返回已有链接，不写 KV、不计限额（重复点保存零成本）
+  if (await context.env.SNAP.get("snap:" + id))
+    return new Response(JSON.stringify({ id, url: new URL("/s/" + id, context.request.url).href }), { headers });
+  // 保存限额（防刷爆 KV 写额度）：单文档计数 rl:save:<yyyy-mm-dd> 同时记
+  // 全站总量与各来源 IP——此前只有每 IP 上限，换几个 IP 就能把全站每日
+  // 1000 次写额度打满；现加全站每日上限 200 次新快照（每次 2 写、全天
+  // 最多 400 写封顶）。KV 无原子计数，并发下计数是尽力而为，总量级受控。
   const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
   const day = new Date().toISOString().slice(0, 10);
-  const rlKey = "rl:save:" + ip + ":" + day;
-  const used = parseInt((await context.env.SNAP.get(rlKey)) || "0", 10) || 0;
-  if (used >= 100)
+  const rlKey = "rl:save:" + day;
+  let doc = { total: 0, ips: {} };
+  try { doc = JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || doc; } catch (e) { /* 计数文档损坏按零起算 */ }
+  if ((doc.ips[ip] || 0) >= 100 || doc.total >= 200)
     return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
-  const id = newId();
-  await context.env.SNAP.put("snap:" + id, lines.join("\n") + "\n", { expirationTtl: 180 * 24 * 3600 });
-  await context.env.SNAP.put(rlKey, String(used + 1), { expirationTtl: 2 * 24 * 3600 });
+  await context.env.SNAP.put("snap:" + id, stored, { expirationTtl: 180 * 24 * 3600 });
+  doc.total += 1;
+  doc.ips[ip] = (doc.ips[ip] || 0) + 1;
+  await context.env.SNAP.put(rlKey, JSON.stringify(doc), { expirationTtl: 2 * 24 * 3600 });
   return new Response(JSON.stringify({ id, url: new URL("/s/" + id, context.request.url).href }), { headers });
 }

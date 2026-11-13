@@ -142,7 +142,10 @@ def _v6_ok(ip):
     """IPv6 地址校验：合法且为全球单播（排环回/链路本地/私有/保留段）。"""
     import ipaddress
     try:
-        return ipaddress.IPv6Address(ip).is_global
+        addr = ipaddress.IPv6Address(ip)
+        # 与 valid_ipv4 同口径：is_global 在 Python ≤3.12 对组播段 ff00::/8
+        # 仍返回 True，必须单独排除，否则组播地址会混进 IPv6 池
+        return addr.is_global and not addr.is_multicast
     except Exception:  # noqa: BLE001
         return False
 
@@ -327,14 +330,27 @@ def parse_native(text):
     return out
 
 
-def extract_cc(tail):
+def extract_cc(tail, tag=""):
     """从源行的尾巴里按段找地区：国名旁的 CC > 3 字母机房码 > 独立 CC 词。"""
     for seg in tail.split("|"):
         seg = seg.strip()
         if not seg:
             continue
+        # 辣子鸡源的节点代号 LA 指洛杉矶（Los Angeles），不是老挝：
+        # 该源用城市代号命名节点（LA / SJC 等），其 LA 条目实为美国节点
+        if tag and "辣子鸡" in tag and re.search(r"(?<![A-Z])LA(?![A-Z])", seg):
+            return "US"
+        # 运营商代号（移动CM / 电信CT / 联通CU）不是地区码：CM 在白名单里
+        # 是喀麦隆，先把「运营商汉字 + 代号」里的代号摘掉，避免误判地区
+        seg = re.sub(r"(移动|联通|电信|广电)\s*(CMCC|CUCC|CTCC|CM|CU|CT)\b",
+                     r"\1", seg)
         for name, code in sorted(CN_NAME2CC.items(), key=lambda kv: -len(kv[0])):
             if name in seg:
+                # 「中国移动/中国电信/中国联通」是运营商线路标注、不是地区：
+                # 这类段的地区应由同段的机房码 / CC 决定，不能见「中国」就判 CN
+                if name == "中国" and re.search(
+                        r"中国\s*(移动|电信|联通|广电)", seg):
+                    continue
                 return code
         m = re.search(r"[一-鿿]\s*([A-Z]{2})\b", seg)
         if m and m.group(1) in CC_WHITELIST:
@@ -349,7 +365,9 @@ def extract_cc(tail):
 
 
 def parse_loose(text, tag):
-    out, sw, skipped = [], [], 0
+    # skipped 拆两类计数：bad = 非法/内网/端口坏的行，noreg = 合法但无地区
+    # 标注的行——混在一起报表分不清是源质量差还是标注口径问题
+    out, sw, skipped_bad, skipped_noreg = [], [], 0, 0
     for raw in text.splitlines():
         line = ZW_RE.sub("", raw.strip())
         m = LOOSE_RE.match(line)
@@ -357,34 +375,34 @@ def parse_loose(text, tag):
             continue
         ip, port = m.group(1), m.group(2)
         if PRIVATE_RE.match(ip) or not valid_ipv4(ip) or not valid_port(port):
-            skipped += 1
+            skipped_bad += 1
             continue
         tail = line[m.end():]
-        cc = extract_cc(tail)
+        cc = extract_cc(tail, tag)
         carrier = CARRIER_RE.search(tail)
+        # 源行自带的延迟 / 速度标注：地区分支与三网分支同等保留（此前地区
+        # 分支丢弃，导致全国补充池条目永远没有 ms，延迟阈值筛选对它们失效）
+        ms = re.search(r"([\d.]+)\s*ms", tail, re.I)
+        mb = re.search(r"([\d.]+)\s*(?:mb/s|Mbps)", tail, re.I)
+        met = (f" {ms.group(1)}ms" if ms else "") + \
+              (f" {mb.group(1)}Mbps" if mb else "")
         if not cc:
             # 破例：无地区、但带运营商实测的条目收进「三网专区」（代号 SW）
             if carrier:
-                label = tag + f"·{carrier.group(1)}"
-                ms = re.search(r"([\d.]+)\s*ms", tail, re.I)
-                mb = re.search(r"([\d.]+)\s*(?:mb/s|Mbps)", tail, re.I)
-                if ms:
-                    label += f" {ms.group(1)}ms"
-                if mb:
-                    label += f" {mb.group(1)}Mbps"
+                label = tag + f"·{carrier.group(1)}" + met
                 sw.append(f"{ip}:{port}#SW [{label}]")
             else:
-                skipped += 1
+                skipped_noreg += 1
             continue
-        label = tag + (f"·{carrier.group(1)}" if carrier else "")
+        label = tag + (f"·{carrier.group(1)}" if carrier else "") + met
         out.append(f"{ip}:{port}#{cc} [{label}]")
-    return out, sw, skipped
+    return out, sw, skipped_bad, skipped_noreg
 
 
 def _classify(ip, port, ctx, tag, out, sw):
     """按上下文（地区码 / 运营商）把一条 IP:端口 放进地区池或三网专区。
     测速数字只取本行内的，避免多记录挤页时串到下一条。"""
-    cc = extract_cc(ctx)
+    cc = extract_cc(ctx, tag)
     carrier = CARRIER_RE.search(ctx)
     first_line = ctx.split("\n", 1)[0]
     ms = re.search(r"([\d.]+)\s*ms", first_line, re.I)
@@ -414,6 +432,22 @@ def parse_salvage(text, tag):
         starts.append(pos)
         pos += len(ln) + 1
     lines = flat.split("\n")
+    # 全部记录起点（任一 IP 出现处）先索引：标注窗在下一条记录开始前截断，
+    # 否则 200 字符窗会跨行吃到下一条记录的地区/运营商，把地区串给上一条
+    import bisect as _bisect
+    all_starts = sorted(
+        starts[i] + m.start()
+        for i, ln in enumerate(lines)
+        for rx in (IPPORT_SCAN_RE, BAREIP_SCAN_RE)
+        for m in rx.finditer(ln))
+
+    def _win(p):
+        end = p + 200
+        j = _bisect.bisect_right(all_starts, p)
+        if j < len(all_starts):
+            end = min(end, all_starts[j])
+        return flat[p:end]
+
     for i, ln in enumerate(lines):
         base = starts[i]
         for m in IPPORT_SCAN_RE.finditer(ln):
@@ -423,19 +457,26 @@ def parse_salvage(text, tag):
             if (ip, port) in seen:
                 continue
             seen.add((ip, port))
-            _classify(ip, port, flat[base + m.start(): base + m.start() + 200],
-                      tag, out, sw)
+            _classify(ip, port, _win(base + m.start()), tag, out, sw)
         for m in BAREIP_SCAN_RE.finditer(ln):
             ip = m.group(1)
             if PRIVATE_RE.match(ip) or not valid_ipv4(ip):
                 continue
-            after = flat[base + m.start(): base + m.start() + 200]
+            after = _win(base + m.start())
             pm = PORT_LABEL_RE.search(after)
             if pm:
                 port = int(pm.group(1))
             else:
-                nm = re.search(r"[,\s](\d{2,5})(?=[,\s]|$)", ln[m.end():])
-                port = int(nm.group(1)) if nm else 443
+                # 裸 IP 后第一个数字未必是端口：紧跟 ms/Mbps 的是延迟/速度，
+                # 跳过这类数字继续找，都没有才默认 443
+                port = 443
+                rest = ln[m.end():]
+                for nm in re.finditer(r"[,\s](\d{2,5})(?=[,\s]|$)", rest):
+                    tail = rest[nm.end():nm.end() + 8].lstrip().lower()
+                    if tail.startswith(("ms", "mbps", "mb/s")):
+                        continue
+                    port = int(nm.group(1))
+                    break
             if not (0 < port <= 65535) or (ip, port) in seen:
                 continue
             seen.add((ip, port))
@@ -477,27 +518,28 @@ def parse_loose_any(text, tag):
     """格式自适应：标准 → Base64 解码 → 分享链接 → 兼容扫描，首个有产出的胜出。
     返回 (地区条目, 专区条目, 跳过数, 适配方式)。源站改格式时自动跟上，备注里标明。"""
     import base64 as _b64
-    lines, sw, skipped = parse_loose(text, tag)
+    # skipped 以 (非法行, 无地区行) 元组透传，报表分别计数
+    lines, sw, bad, noreg = parse_loose(text, tag)
     if lines or sw:
-        return lines, sw, skipped, "标准"
+        return lines, sw, (bad, noreg), "标准"
     compact = re.sub(r"\s+", "", text)
     if len(compact) > 40 and re.fullmatch(r"[A-Za-z0-9+/=]+", compact):
         try:
             decoded = _b64.b64decode(compact + "==", validate=False).decode("utf-8", "replace")
-            lines, sw, skipped = parse_loose(decoded, tag)
+            lines, sw, bad, noreg = parse_loose(decoded, tag)
             if not lines and not sw:
                 lines, sw = parse_uri_list(decoded, tag)
             if lines or sw:
-                return lines, sw, skipped, "Base64 解码"
+                return lines, sw, (bad, noreg), "Base64 解码"
         except Exception:  # noqa: BLE001
             pass
     lines, sw = parse_uri_list(text, tag)
     if lines or sw:
-        return lines, sw, 0, "分享链接解析"
+        return lines, sw, (0, 0), "分享链接解析"
     lines, sw = parse_salvage(text, tag)
     if lines or sw:
-        return lines, sw, 0, "兼容扫描"
-    return [], [], skipped, "标准"
+        return lines, sw, (0, 0), "兼容扫描"
+    return [], [], (bad, noreg), "标准"
 
 
 def number_lines(lines):
@@ -518,11 +560,20 @@ def number_lines(lines):
     return out
 
 
+V6KEY_RE = re.compile(r"^(\[[0-9a-fA-F:]+\]:\d+)")
+
+
 def dedupe(lines):
     seen, out = set(), []
     for line in lines:
         m = LOOSE_RE.match(line)
-        key = m.group(0) if m else line
+        if m:
+            key = m.group(0)
+        else:
+            # IPv6 条目是 [地址]:端口 形式，LOOSE_RE 只认 IPv4——此前 v6 行
+            # 整行作键，同一地址换个标签就算新条目（实测 108 条仅 88 个地址）
+            m6 = V6KEY_RE.match(line)
+            key = m6.group(1) if m6 else line
         if key not in seen:
             seen.add(key)
             out.append(line)
@@ -597,7 +648,36 @@ def load_baseline():
     base["prev_total"] = _prev("total", len(_read_pub_lines("all.txt")))
     base["prev_v6"] = _prev("v6_total", len(all6_lines))
     base["prev_domains"] = _prev("domains_total", len(dom_lines))
+    # 跨轮状态（总池保护连续触发计数 + 各源连续兜底计数）：meta.json 在
+    # 保护冻结轮不会重写，状态必须单独落盘，否则冻结轮读到的永远是旧计数
+    state = {"guard_streak": 0, "fb": {}}
+    try:
+        raw = json.loads((DATA / "agg_state.json").read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            if isinstance(raw.get("guard_streak"), int):
+                state["guard_streak"] = raw["guard_streak"]
+            if isinstance(raw.get("fb"), dict):
+                state["fb"] = {str(k): int(v) for k, v in raw["fb"].items()
+                                if isinstance(v, int) and v > 0}
+    except Exception:  # noqa: BLE001 — 状态读失败按零计数继续，不拖垮聚合
+        pass
+    base["state"] = state
     return base
+
+
+# 单源连续用上轮数据兜底的上限（轮）：2 小时一轮，6 轮 ≈ 半天——超过说明
+# 上游已长期死亡，继续沿用只会把陈旧数据当新鲜数据发出去
+FALLBACK_MAX = 6
+
+
+def _save_agg_state(guard_streak, fb_map):
+    try:
+        (DATA / "agg_state.json").write_text(json.dumps(
+            {"guard_streak": int(guard_streak or 0),
+             "fb": {k: int(v) for k, v in (fb_map or {}).items() if v}},
+            ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — 状态写失败不拖垮聚合（下轮按旧状态继续）
+        pass
 
 
 def _loose_fallback(base, tag):
@@ -755,6 +835,18 @@ def main():
     fallbacks = []  # 本轮用上轮基线兜底的源名（写进 meta 便于巡检发现）
     meta_sources = []
     groups = {}
+    # 兜底连续计数：达到 FALLBACK_MAX 的源本轮起不再沿用上轮数据（防陈旧
+    # 数据无限续命）；用了兜底的源在 meta 里如实标 ok=False，不谎报正常
+    agg_state = baseline.get("state") or {"guard_streak": 0, "fb": {}}
+    fb_prev = agg_state.get("fb") or {}
+    round_fb = {}
+
+    def fb_allowed(name):
+        return fb_prev.get(name, 0) < FALLBACK_MAX
+
+    def fb_use(name):
+        round_fb[name] = fb_prev.get(name, 0) + 1
+        return round_fb[name]
 
     for src in SOURCES_NATIVE:
         text, used_url = fetch(src["urls"])
@@ -765,13 +857,14 @@ def main():
             except Exception as exc:  # noqa: BLE001 — 单源数据异常不得拖垮整轮
                 print(f"[warn] native parse failed {src['name']}: {exc}", file=sys.stderr)
                 lines = []
-        if not lines and baseline[src["key"]]:
-            # 本轮抓取失败/为空：沿用上一轮已发布数据兜底
+        if not lines and baseline[src["key"]] and fb_allowed(src["name"]):
+            # 本轮抓取失败/为空：沿用上一轮已发布数据兜底（如实标未恢复）
             groups[src["key"]] = list(baseline[src["key"]])
             fallbacks.append(src["name"])
             meta_sources.append({"name": src["name"], "url": src["urls"][0],
-                                 "ok": True, "lines_in": 0,
+                                 "ok": False, "lines_in": 0,
                                  "lines_used": len(groups[src["key"]]),
+                                 "fallback_streak": fb_use(src["name"]),
                                  "note": src["note"] + "；本轮抓取失败/为空，已沿用上轮数据"})
             continue
         if text is None:
@@ -783,7 +876,11 @@ def main():
         groups[src["key"]] = lines
         meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
                              "lines_in": len(text.splitlines()),
-                             "lines_used": len(lines), "note": src["note"]})
+                             "lines_used": len(lines),
+                             # 抓到内容却解析出 0 条要和真失败区分开标注：
+                             # 多半是源改版/发空文件，静默 ok 会掩盖问题
+                             "note": src["note"] + ("" if lines else
+                                 "；本轮抓取成功但解析为 0 条（源可能改版或内容为空）")})
 
     # 静态精选（人工整理，不随源更新）
     seed = ROOT / "seed-usjp.txt"
@@ -835,15 +932,17 @@ def main():
                        used_url, False, pmode)
                 break
         if got is None and last_text is None:
-            fb = _loose_fallback(baseline, src["tag"])
+            fb = _loose_fallback(baseline, src["tag"]) \
+                if fb_allowed(src["name"]) else None
             if fb:
                 fb_lines, fb_sw = fb
                 extra_all.extend(fb_lines)
                 sw_all.extend(fb_sw)
                 fallbacks.append(src["name"])
                 meta_sources.append({"name": src["name"], "url": src["url"],
-                                     "ok": True, "lines_in": 0,
+                                     "ok": False, "lines_in": 0,
                                      "lines_used": len(fb_lines) + len(fb_sw),
+                                     "fallback_streak": fb_use(src["name"]),
                                      "note": "本轮抓取失败，已沿用上轮数据"})
                 continue
             meta_sources.append({"name": src["name"], "url": src["url"],
@@ -851,9 +950,10 @@ def main():
                                  "note": "抓取失败，保留上次数据外本次跳过"})
             continue
         if got is None:
-            got = ([], [], 0, len(last_text.splitlines()), last_url, False, "标准")
+            got = ([], [], (0, 0), len(last_text.splitlines()), last_url,
+                   False, "标准")
         lines, sw_lines, skipped, lines_in, used_url, via_api, pmode = got
-        if not lines and not sw_lines:
+        if not lines and not sw_lines and fb_allowed(src["name"]):
             fb = _loose_fallback(baseline, src["tag"])
             if fb:
                 lines, sw_lines = fb
@@ -867,7 +967,13 @@ def main():
                     if ("<!DOCTYPE" in text or "<html" in text.lower())
                     else "源格式无法识别（可能改版），本轮未收录，已自动尝试 Base64 / 分享链接 / 兼容扫描")
         else:
-            note = f"全国源补充；{skipped} 条无地区标注已剔除"
+            sk_bad, sk_noreg = skipped if isinstance(skipped, tuple) \
+                else (0, skipped)
+            note = "全国源补充"
+            if sk_bad:
+                note += f"；{sk_bad} 条非法/内网行已剔除"
+            if sk_noreg:
+                note += f"；{sk_noreg} 条无地区标注已剔除"
             if sw_lines:
                 note += f"；另 {len(sw_lines)} 条无地区但带运营商实测，收进三网专区"
             if pmode == "上轮兜底":
@@ -878,7 +984,11 @@ def main():
                 note += f"；源格式已变化，本站以「{pmode}」兼容解析自动适配"
             elif "<!DOCTYPE" in text or "<html" in text.lower():
                 note += "；源文件另混有网页代码，相关行已剔除"
-        meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
+        _on_fb = pmode == "上轮兜底"
+        meta_sources.append({"name": src["name"], "url": used_url,
+                             "ok": not _on_fb,
+                             **({"fallback_streak": fb_use(src["name"])}
+                                if _on_fb else {}),
                              "lines_in": lines_in,
                              "lines_used": len(lines) + len(sw_lines),
                              "note": note})
@@ -954,13 +1064,15 @@ def main():
                 break
         used_fb = False
         if lines is None and last_text is None and not src.get("api_only"):
-            fb = baseline["v6_by_tag"].get(src["tag"])
+            fb = baseline["v6_by_tag"].get(src["tag"]) \
+                if fb_allowed(src["name"]) else None
             if fb:
                 v6_all.extend(fb)
                 fallbacks.append(src["name"])
                 meta_sources.append({"name": src["name"], "url": src["url"],
-                                     "ok": True, "lines_in": 0,
+                                     "ok": False, "lines_in": 0,
                                      "lines_used": len(fb),
+                                     "fallback_streak": fb_use(src["name"]),
                                      "note": "IPv6 源，本轮抓取失败，已沿用上轮数据"})
                 continue
             meta_sources.append({"name": src["name"], "url": src["url"],
@@ -969,7 +1081,7 @@ def main():
             continue
         if lines is None:
             lines, lines_in = [], (len(last_text.splitlines()) if last_text else 0)
-        if not lines:
+        if not lines and fb_allowed(src["name"]):
             fb = baseline["v6_by_tag"].get(src["tag"])
             if fb:
                 lines, used_fb = list(fb), True
@@ -980,7 +1092,10 @@ def main():
             note += "；本轮抓取失败/为空，已沿用上轮数据"
         elif via_api:
             note += "；本轮走原头 API 直连"
-        meta_sources.append({"name": src["name"], "url": used_url, "ok": True,
+        meta_sources.append({"name": src["name"], "url": used_url,
+                             "ok": not used_fb,
+                             **({"fallback_streak": fb_use(src["name"])}
+                                if used_fb else {}),
                              "lines_in": lines_in,
                              "lines_used": len(lines),
                              "note": note})
@@ -999,15 +1114,17 @@ def main():
                 pairs = []
         if not pairs:
             # 本轮抓取失败/为空：沿用上轮该源域名（上轮已通过解析筛选，免重复验活）
-            fb = baseline["domains_by_short"].get(src["short"], [])
+            fb = baseline["domains_by_short"].get(src["short"], []) \
+                if fb_allowed(src["name"]) else []
             if fb:
                 for dom, lab in fb:
                     if dom not in dom_map:
                         dom_map[dom] = lab
                 fallbacks.append(src["name"])
                 meta_sources.append({"name": src["name"], "url": src["url"],
-                                     "ok": True, "lines_in": 0,
+                                     "ok": False, "lines_in": 0,
                                      "lines_used": len(fb),
+                                     "fallback_streak": fb_use(src["name"]),
                                      "note": "域名源，本轮抓取失败/为空，已沿用上轮数据"})
                 continue
             if text is None:
@@ -1034,14 +1151,28 @@ def main():
                                "file": "data/domains.txt",
                                "note": f"{len(DOMAIN_SOURCES)} 个域名源聚合去重，本轮解析筛除 {screened} 个"}
 
-    # 总池保护：任一池较上轮跌幅 >20% 时保留上轮产物、本轮不覆盖写出。
+    # 总池保护：任一池较上轮跌幅 >20% 时先保留上轮产物、本轮不覆盖写出。
     # 只告警不报错：工作流后续的提交步会因无改动自然跳过，保活步照常执行。
+    # 但保护不能永久冻结：跌幅连续两轮成立，说明上游缩水已成常态（基线就是
+    # 上轮产物，旧逻辑下新数据永远过不了线、站点数据被永久冻在旧值），第二
+    # 轮起接受发布并在 meta 里显式标注，仍发告警请人工复核上游。
     drops = _pool_drops(baseline, len(groups["all"]), len(v6_all), len(domains))
+    guard_streak = 0
     if drops:
-        alert_pool_drop(drops)
-        print(json.dumps({"guard": "pool-drop", "kept_previous": True},
-                         ensure_ascii=False))
-        return
+        guard_streak = int(agg_state.get("guard_streak") or 0) + 1
+        if guard_streak < 2:
+            alert_pool_drop(drops)
+            _save_agg_state(guard_streak, fb_prev)
+            print(json.dumps({"guard": "pool-drop", "kept_previous": True},
+                             ensure_ascii=False))
+            return
+        _detail = "；".join(
+            f"{n} {p} → {c}（跌幅 {(1 - c / p) * 100:.1f}%）"
+            for n, p, c in drops)
+        print(f"::warning::聚合总池保护连续 {guard_streak} 轮触发：{_detail}；"
+              "跌幅持续成立，判定上游缩水已成常态，本轮按新数据发布，请复核上游")
+        print(f"[warn] pool drop guard accepted on streak {guard_streak}: "
+              f"{_detail}", file=sys.stderr)
 
     # —— 通过保护检查后才统一落盘 ——
     (DATA / "top.txt").write_text("\n".join(number_lines(top_lines)) + "\n",
@@ -1085,7 +1216,9 @@ def main():
         "regions": regions,
         "sources": meta_sources,
         "fallback_sources": fallbacks,
+        "pool_guard_streak": guard_streak,
     }
+    _save_agg_state(guard_streak, round_fb)
     (DATA / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({k: v["count"] for k, v in meta_groups.items()},

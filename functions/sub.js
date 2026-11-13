@@ -8,7 +8,10 @@
 //   ports=tls          端口：all（缺省）| 443 | tls(443/8443/2053/2083/2087/2096)
 //   mode=random        随机抽取（缺省质量优先源序）
 //   stack=6            IPv6 池（此时 regions/ms/mbps 不适用，可用 n/carrier）
+//   group=best|full|extra|sw|all  数据分组（缺省 all 合并总表；与页面分组对应）
 //   ui=12              建议客户端更新间隔（小时，写响应头）
+// 参数非法（ms/mbps 非数字、ports/mode/group/stack 取值不在枚举内、n/rn
+// 为负）时返回 400 并注明哪个参数错了，不再静默忽略或悄悄给空结果。
 // 每次请求基于最新聚合数据现算，链接内容实时更新。
 const LINE_RE = /^(\S+?)#([A-Z]{2})\d*\s*(?:\[(.*)\])?$/;
 
@@ -21,7 +24,7 @@ function renumber(lines) {
   }));
 }
 
-const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦'};
+const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦',LA:'老挝',ZA:'南非',MM:'缅甸',BD:'孟加拉',NP:'尼泊尔',LK:'斯里兰卡'};
 function flagEmoji(cc) {
   if (!cc || !/^[A-Z]{2}$/.test(cc) || cc === "SW") return "";
   return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
@@ -107,10 +110,18 @@ export async function onRequest(context) {
   const headers = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-cache" };
   if (!isNaN(ui) && ui > 0) headers["profile-update-interval"] = String(ui);
 
+  const badParam = name => new Response(
+    `# 参数错误：${name} 的取值不合法，请检查订阅链接\n`,
+    { status: 400, headers });
   const nAll = parseInt(q.get("n") || "", 10);
+  if (q.get("n") !== null && (isNaN(nAll) || nAll < 1)) return badParam("n");
   const carrier = q.get("carrier") || "";
   const carrierSet = new Set(carrier.split(",").map(x => x.trim()).filter(Boolean));
   const mode = q.get("mode") || "";
+  if (mode && mode !== "random") return badParam("mode");
+  if (q.get("stack") !== null && q.get("stack") !== "6") return badParam("stack");
+  const group = q.get("group") || "all";
+  if (!["best", "full", "extra", "sw", "all"].includes(group)) return badParam("group");
   const fmtRaw = q.get("fmt");
   const fmt = fmtRaw === null ? null : fmtRaw.slice(0, 300).replace(/[\r\n]/g, "");
 
@@ -124,21 +135,29 @@ export async function onRequest(context) {
     }
 
     const regions = new Set(
-      (q.get("regions") || "JP,US").split(",").map(s => s.trim().toUpperCase()).filter(Boolean)
+      (q.get("regions") || (group === "sw" ? "SW" : "JP,US"))
+        .split(",").map(s => s.trim().toUpperCase()).filter(Boolean)
     );
     const rn = {};
+    let rnBad = false;
     (q.get("rn") || "").split(",").forEach(part => {
+      if (!part.trim()) return;
       const [cc, v] = part.split(".");
       const num = v ? parseInt(v, 10) : NaN;
-      // NaN 守卫：rn 值非法/缺失时不写入，回退到 n / 不限的现有默认；
-      // 原实现会把 NaN 存进 rn，后续 slice(0, NaN) 会把该地区静默清空
-      if (cc && !Number.isNaN(num)) rn[cc.trim().toUpperCase()] = num;
+      // rn 值非法/为负：整单 400，不再静默吞掉（原实现把 NaN 存进 rn 时
+      // slice(0, NaN) 会把该地区悄悄清空，负数则悄悄给空，都难以排查）
+      if (!cc || Number.isNaN(num) || num < 0) { rnBad = true; return; }
+      rn[cc.trim().toUpperCase()] = num;
     });
+    if (rnBad) return badParam("rn");
     const maxMs = parseFloat(q.get("ms") || "");
+    if (q.get("ms") !== null && isNaN(maxMs)) return badParam("ms");
     const minMbps = parseFloat(q.get("mbps") || "");
+    if (q.get("mbps") !== null && isNaN(minMbps)) return badParam("mbps");
     const ports = q.get("ports") || "all";
+    if (!["all", "443", "tls"].includes(ports)) return badParam("ports");
 
-    const pool = await loadPool(context, url.origin, "/data/all.txt");
+    const pool = await loadPool(context, url.origin, `/data/${group}.txt`);
     const byRegion = {};
     for (const raw of pool) {
       const p = parseLine(raw);

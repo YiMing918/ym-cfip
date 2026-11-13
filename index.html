@@ -280,10 +280,10 @@ footer a{color:var(--acc2);text-decoration:none}
       <option value="">（不建议）</option><option value="6">6 小时</option>
       <option value="12" selected>12 小时</option><option value="24">24 小时</option><option value="48">48 小时</option>
     </select> 更新一次</label>
-    <label>本站数据每 <select id="aggFreq">
+    <label>我关注的聚合间隔（仅本地备忘） <select id="aggFreq">
       <option value="30">30 分钟</option><option value="60">1 小时</option>
       <option value="120" selected>2 小时</option><option value="360">6 小时</option><option value="720">12 小时</option>
-    </select> 聚合一次</label>
+    </select></label>
   </div>
   <div class="note" id="aggNote" style="margin-top:6px"></div>
 </div>
@@ -321,7 +321,7 @@ footer a{color:var(--acc2);text-decoration:none}
   <div class="note">从 Cloudflare 官方公布的 IP 段（15 段、约 150 万个地址）随机采样。Anycast 裸地址<b>抽的时候没有地区、没有运营商数据</b>，这批<b>未经任何实测</b> — 正确用法是点「本地检测这批」在你自己的网络里筛；检测后会自动识别可用条目的<b>真实落地地区</b>，可按地区只留想要的，还能把这批存成<b>快照订阅</b>。</div>
   <div class="ctrl">
     <label>采样数量 <select id="bigN"><option value="500">500</option><option value="1000" selected>1000</option><option value="2000">2000</option><option value="5000">5000</option></select></label>
-    <label>或自定义 <input type="number" id="bigCustom" min="100" max="10000" step="100" placeholder="100–10000" style="width:110px"></label>
+    <label>或自定义 <input type="number" id="bigCustom" min="100" max="5000" step="100" placeholder="100–5000" style="width:110px"></label>
     <label>端口 <select id="bigPort"><option value="443">443</option><option value="rand">随机常用端口</option></select></label>
     <button class="btn primary" id="btnSample">🎲 重新采样</button>
     <button class="btn" id="btnBigScan">⚡ 本地检测这批</button>
@@ -381,23 +381,23 @@ footer a{color:var(--acc2);text-decoration:none}
   </div>
   <div class="note">
     <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 38 个公开优选源拉取清单（28 个 IP 源 + 10 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（比如换成 Base64 编码订阅、分享链接、JSON / CSV 数据文件）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<br>
-    <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP 被多个源收录只算一次；某个源某轮抓取失败，它独有的条目会临时掉出、下一轮自动恢复。页面顶部「更新于」就是最近一轮的时间。<br>
-    <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 握手探测（超时统一 5 秒，对齐主流客户端健康检查的默认口径；证书不匹配 IP 会报错返回，测的是报错前耗时）：有响应 = 你当前网络能连上该 IP:端口，不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
+    <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP:端口 只算一次（同 IP 不同端口算不同条目）；某个源某轮抓取失败时，先沿用它上一轮的数据顶着并在「来源」里如实标注，连续多轮（6 轮）都失败才会停用它的数据。页面顶部「更新于」就是最近一轮的时间。<br>
+    <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 请求（超时统一 5 秒）：收到响应 = 确认可达并计耗时；连接被拒、超时、或证书与 IP 不匹配都会记为「未确认」——浏览器里没法区分这几种情况，未确认不等于不可用（有些 IP 证书对不上但配上域名照样能用）。确认可达也不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
     <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。<br>
-    <b>⑤ 条数为什么比别家少。</b>本站只收各源实测后发布的成品清单，不自己扫网段：无地区标注的剔除、同一 IP 被多个源收录只算一次、每轮重建不攒失效库存 — 所以每地区是几十到几百条的实测口径。别家「每地区几千条」多是扫描官方段的未实测地址或未去重的堆叠；想要量，用⑥大池采样（官方段采样 + 本地检测自己筛）。<br>
+    <b>⑤ 条数为什么比别家少。</b>本站只收各源实测后发布的成品清单，不自己扫网段：无地区标注的剔除、同一 IP:端口 只算一次、每轮重建不攒失效库存 — 所以每地区是几十到几百条的实测口径。别家「每地区几千条」多是扫描官方段的未实测地址或未去重的堆叠；想要量，用⑥大池采样（官方段采样 + 本地检测自己筛）。<br>
     <b>⑥ 其他口径。</b>四网（移动/电信/联通/广电）里，<b>广电全网暂无公开实测源</b> — 选广电时给的是通用条目，广电用户请务必用本地检测在自家网络实测筛选。「送复检站」会复制当前清单并打开你选的 IP 监测站（推荐 IPCheck.ing，也可自填任意监测站地址，选择保存在本地浏览器）。优选域名由第三方维护，晚高峰可能变卡，作回退入口更合适。优选 IP 时效性强，失效条目以下一次聚合为准。
   </div>
 </div>
 
 <footer>
-  YM 优选 IP · 数据来自公开优选源，版权归各源所有 · 本站不记录访客信息
+  YM 优选 IP · 数据来自公开优选源，版权归各源所有 · 本站不设账号、不建访客档案；页首属地识别会向第三方 IP 库查询你的出口 IP，保存快照时为防刷会在服务器短暂记录来源 IP 计数（2 天自动过期）
 </footer>
 </div>
 <div id="toast"></div>
 <script>
 window.__initHash = location.hash;
 // 复检站点为页面级设置（推荐 IPCheck.ing / ping0.cc / 自定义），保存在访客浏览器 localStorage。
-const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦'};
+const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦',LA:'老挝',ZA:'南非',MM:'缅甸',BD:'孟加拉',NP:'尼泊尔',LK:'斯里兰卡'};
 const PRESETS = {
   usjp: ['JP','US'],
   asia: ['CN','HK','TW','JP','KR','SG','MY','TH','VN','ID','IN','PH','KH','PK','KZ','TM','KG','AZ','GE','AM'],
@@ -457,10 +457,16 @@ function parseLine(line){
           srcMs: ms ? parseFloat(ms[1]) : null,
           srcMbps: mbps ? parseFloat(mbps[1]) : null};
 }
+// localStorage 安全封装：隐私模式/被禁存储时 getItem/setItem 会抛错，
+// 此前多处裸调用一旦抛错就中断初始化；统一走 LS，失败按未存/未存上处理
+const LS = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k, v){ try{ localStorage.setItem(k, v); }catch(e){} },
+};
 // ===== 导出格式自定义：模板变量渲染备注名，套用到复制 / 下载 / 订阅 fmt 参数 =====
 const FMT_DEFAULT = '{代码}{序号} [{标签}]';
 let FMT = FMT_DEFAULT;
-try{ FMT = localStorage.getItem('cfipFmt') || FMT_DEFAULT; }catch(e){}
+try{ FMT = LS.get('cfipFmt') || FMT_DEFAULT; }catch(e){}
 function flagEmoji(cc){
   if(!cc || !/^[A-Z]{2}$/.test(cc) || cc === 'SW') return '';
   return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
@@ -478,8 +484,9 @@ function srcName(tag){
     .replace(/·(移动|电信|联通|广电)/, '').replace(/\s+/g, ' ').trim();
 }
 function todayStr(){
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // 与订阅端点 sub.js 的 {日期} 同口径（UTC+8）：此前页面用访客本地时区，
+  // 跨时区访客在页面与订阅里会看到两个不同的「今日」
+  return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
 }
 function renderRemark(tpl, p, seq){
   const local = p.localMs !== undefined ? p.localMs : lat[p.addr];
@@ -532,7 +539,7 @@ function syncFmtChips(){
 $('fmtInput').value = FMT;
 $('fmtInput').addEventListener('input', e => {
   FMT = e.target.value;
-  try{ localStorage.setItem('cfipFmt', FMT); }catch(err){}
+  try{ LS.set('cfipFmt', FMT); }catch(err){}
   fmtPreviewUpdate(); refreshSub(); syncFmtChips();
 });
 document.querySelectorAll('#fmtPresets button').forEach(b =>
@@ -621,7 +628,7 @@ function renderChips(){
   $('rgrid').innerHTML = codes.map(cc => {
     const on = selected.has(cc);
     const okBadge = availByRegion && availByRegion[cc] ? `<span class="ok">✓${availByRegion[cc]}</span>` : '';
-    const nIn = on ? `<input class="ninput" type="number" min="0" data-cc="${cc}" placeholder="全部" value="${regionN[cc] ?? ''}">` : '';
+    const nIn = on ? `<input class="ninput" type="number" min="0" data-cc="${cc}" placeholder="全部" value="${esc(regionN[cc] ?? '')}">` : '';
     return `<span class="rchip${on ? ' on' : ''}" data-cc="${cc}">${cc} ${NAMES[cc] || ''}<span class="cnt">${counts[cc]}</span>${okBadge}${nIn}</span>`;
   }).join('');
   document.querySelectorAll('.rchip').forEach(el =>
@@ -685,17 +692,22 @@ function renderTable(){
     el.addEventListener('click', () => copyText(el.dataset.line, '已复制：' + el.dataset.line)));
 }
 function probe(addr, timeoutMs){
+  // 探测口径（已修正）：fetch(no-cors) 收到任何 HTTP 响应才算「确认可达」并
+  // 计耗时；连接被拒 / DNS 失败 / 超时 / TLS 证书不匹配都会 reject，记 -1
+  // 「未确认」。旧实现用图片探测且 onerror 也算通——被拒连接的报错最快，
+  // 死 IP 反而被排到最前。浏览器里无法区分「真死」与「证书对不上但可用」，
+  // 所以 -1 只表示未确认、不表示不可用，文案与导出都按这个口径。
   return new Promise(res => {
     let hostport;
     if(addr.startsWith('[')) hostport = addr;
     else { const [h, p] = addr.split(':'); hostport = `${h}:${p || 443}`; }
-    const img = new Image();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs || 5000);
     const t0 = performance.now();
-    const done = ok => { res(ok ? Math.round(performance.now() - t0) : -1); };
-    const timer = setTimeout(() => done(false), timeoutMs || 5000);
-    img.onload = () => { clearTimeout(timer); done(true); };
-    img.onerror = () => { clearTimeout(timer); done(true); };
-    img.src = `https://${hostport}/favicon.ico?_=${Date.now()}${Math.random()}`;
+    fetch(`https://${hostport}/favicon.ico?_=${Date.now()}`, {
+      mode: 'no-cors', cache: 'no-store', signal: ctl.signal,
+    }).then(() => { clearTimeout(timer); res(Math.round(performance.now() - t0)); })
+      .catch(() => { clearTimeout(timer); res(-1); });
   });
 }
 async function probe2(addr, timeoutMs){
@@ -731,8 +743,8 @@ async function scanPool(scope){
   refreshAvail();
   const nRegionsOk = Object.values(availByRegion || {}).filter(v => v > 0).length;
   $('scaninfo').innerHTML = (scanning
-    ? `检测完成：<b>${okN}</b>/${total} 可用，分布在 <b>${nRegionsOk}</b> 个地区（地区钮上的 ✓ 是该地区可用数）`
-    : `已停止：测了 ${doneN}/${total}，可用 <b>${okN}</b> 个`) + `<br>${regionStatText(lines)}`;
+    ? `检测完成：<b>${okN}</b>/${total} 确认可达，分布在 <b>${nRegionsOk}</b> 个地区（地区钮上的 ✓ 是该地区确认数；未确认≠不可用，可能是证书/网络受限没测出来）`
+    : `已停止：测了 ${doneN}/${total}，确认可达 <b>${okN}</b> 个`) + `<br>${regionStatText(lines)}`;
   $('btnSelAvail').disabled = nRegionsOk === 0;
   scanning = false;
   $('btnScan').disabled = false; $('btnScanSel').disabled = false;
@@ -866,7 +878,7 @@ async function testDomains(){
   $('btnDomOk').disabled = ok.length === 0;
   renderDomStats();
   try{
-    localStorage.setItem('cfipDomRes', JSON.stringify({
+    LS.set('cfipDomRes', JSON.stringify({
       gen: META ? META.generated_at : '',
       total, list: DOMRES.list.map(r => [r.dom, r.ms])}));
   }catch(e){}
@@ -948,10 +960,10 @@ async function scanV6(){
   V6RES = {ok: okN, total};
   renderV6Stats();
   try{
-    localStorage.setItem('cfipV6Res', JSON.stringify({
+    LS.set('cfipV6Res', JSON.stringify({
       gen: META ? META.generated_at : '', lat6}));
   }catch(e){}
-  $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 可用（${total ? Math.round(okN / total * 100) : 0}%）` +
+  $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 确认可达（${total ? Math.round(okN / total * 100) : 0}%；未确认≠不可用）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
   btn.disabled = false;
@@ -966,7 +978,7 @@ function buildSubUrl(stack6){
     if($('perN').value) parts.push('n=' + $('perN').value);
     const rnParts = Object.entries(regionN)
       .filter(([k, v]) => selected.has(k) && v !== '' && v !== undefined)
-      .map(([k, v]) => `${k}.${v}`);
+      .map(([k, v]) => `${k}.${encodeURIComponent(v)}`);
     if(rnParts.length) parts.push('rn=' + rnParts.join(','));
     if($('maxMs').value) parts.push('ms=' + $('maxMs').value);
     if($('minMbps').value) parts.push('mbps=' + $('minMbps').value);
@@ -1003,21 +1015,23 @@ $('btnSnap').addEventListener('click', async () => {
       body: JSON.stringify({ text: formatLines(lines).join('\n') }),
     });
     const j = await r.json().catch(() => null);
-    if(!r.ok || !j || !j.url) throw 0;
+    if(!r.ok || !j || !j.url) throw (j && j.error) || 0;
     $('snapUrl').value = j.url;
     $('snapRow').style.display = '';
     toast(scope === 'all'
       ? `已存快照订阅：${lines.length} 条（清单全部）`
       : `已存快照订阅：${lines.length} 条测通的（清单 ${RESULT.length} 条，超时/未测的已剔除）`);
-  }catch(e){ toast('存快照失败，稍后再试'); }
+  }catch(e){ toast(typeof e === 'string' ? `存快照失败：${e}` : '存快照失败，稍后再试'); }
   $('btnSnap').disabled = false;
 });
 $('btnSnapCopy').addEventListener('click', () => copyText($('snapUrl').value, '已复制快照订阅链接'));
 function refreshAggNote(){
   const v = $('aggFreq').value;
-  localStorage.setItem('cfipAggFreq', v);
+  LS.set('cfipAggFreq', v);
   const label = v >= 60 ? `${v / 60} 小时` : `${v} 分钟`;
-  $('aggNote').textContent = `聚合频率已记下：每 ${label} 抓一次源、更新数据（部署时按这个设置写进定时任务，之后想改告诉我一声即可）。订阅链接本身是实时现算的，客户端拉取时永远拿当时最新数据。`;
+  // 如实说明：聚合频率由服务端定时任务固定（每 2 小时），这个下拉只是
+  // 访客本地的备忘，不改变服务端任何设置（旧文案会让人误以为能改频率）
+  $('aggNote').textContent = `已记下你关注的间隔（每 ${label}，仅保存在本浏览器作备忘）。本站数据由服务端定时任务固定每 2 小时聚合一轮，这个选项不会改变服务端频率。订阅链接是实时现算的，客户端拉取时永远拿当时最新数据。`;
 }
 function saveCfg(){
   try{
@@ -1032,17 +1046,31 @@ function loadCfg(){
   if(!location.hash.startsWith('#c=')) return;
   try{
     const cfg = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(3)))));
-    if(Array.isArray(cfg.r)){ selected.clear(); cfg.r.forEach(cc => selected.add(cc)); }
-    if(cfg.n) $('perN').value = cfg.n;
-    if(cfg.rn) Object.assign(regionN, cfg.rn);
-    if(cfg.ms) $('maxMs').value = cfg.ms;
-    if(cfg.mb) $('minMbps').value = cfg.mb;
-    if(cfg.ca){ carrierSet = new Set((Array.isArray(cfg.ca) ? cfg.ca : [cfg.ca]).filter(c => c !== '全部'));
+    // 分享链接里的配置一律先校验再用：此前 cfg.rn 不经检查并入 regionN 后
+    // 被 renderChips 原样拼进 innerHTML，构造过的 #c= 链接能注入任意 HTML
+    const CC_RE = /^[A-Z]{2}$/;
+    const numStr = (v, max) => {
+      const n = parseInt(v, 10);
+      return (!Number.isNaN(n) && n >= 0 && n <= max) ? String(n) : null;
+    };
+    if(Array.isArray(cfg.r)){ selected.clear(); cfg.r.forEach(cc => { if(CC_RE.test(cc)) selected.add(cc); }); }
+    if(cfg.n){ const v = numStr(cfg.n, 9999); if(v !== null) $('perN').value = v; }
+    if(cfg.rn && typeof cfg.rn === 'object'){
+      for(const [k, v] of Object.entries(cfg.rn)){
+        if(!CC_RE.test(k)) continue;
+        const nv = numStr(v, 9999);
+        if(nv !== null) regionN[k] = nv;
+      }
+    }
+    if(cfg.ms){ const v = numStr(cfg.ms, 100000); if(v !== null) $('maxMs').value = v; }
+    if(cfg.mb){ const v = numStr(cfg.mb, 100000); if(v !== null) $('minMbps').value = v; }
+    if(cfg.ca){ carrierSet = new Set((Array.isArray(cfg.ca) ? cfg.ca : [cfg.ca])
+      .filter(c => ['移动', '电信', '联通', '广电'].includes(c)));
       syncCarrierChips(); }
-    if(cfg.po) $('ports').value = cfg.po;
-    if(cfg.mo) $('mode').value = cfg.mo;
+    if(cfg.po && [...$('ports').options].some(o => o.value === cfg.po)) $('ports').value = cfg.po;
+    if(cfg.mo && [...$('mode').options].some(o => o.value === cfg.mo)) $('mode').value = cfg.mo;
     $('onlyAvail').checked = !!cfg.oa;
-    if(cfg.fmt !== undefined){ $('fmtInput').value = cfg.fmt; $('fmtInput').dispatchEvent(new Event('input')); }
+    if(typeof cfg.fmt === 'string'){ $('fmtInput').value = cfg.fmt.slice(0, 300); $('fmtInput').dispatchEvent(new Event('input')); }
   }catch(e){}
 }
 document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
@@ -1111,7 +1139,8 @@ function ipStr(n){ return [Math.floor(n / 16777216) % 256, Math.floor(n / 65536)
 function pickSeg(){ let x = Math.random() * SEG_TOTAL; for(const r of CF_SEG){ if((x -= r.size) < 0) return r; } return CF_SEG[CF_SEG.length - 1]; }
 function sampleBig(){
   const cv = parseInt($('bigCustom').value, 10);
-  const n = (cv >= 100 && cv <= 10000) ? cv : +$('bigN').value;
+  // 上限与快照后端一致（/save 单份上限 5000 条）：超过存不下、只会报错
+  const n = (cv >= 100 && cv <= 5000) ? cv : +$('bigN').value;
   const seen = new Set(); BIG = [];
   while(BIG.length < n){
     const r = pickSeg();
@@ -1175,6 +1204,10 @@ async function locateBigRegions(){
     $('bigRegionRow').style.display = '';
     $('bigInfo').textContent += ` · 落地地区识别出 ${found} 条（其余读不到 trace，未识别）`;
     renderBig();
+  }else{
+    // 直连 IP 读 trace 要跨过证书与 CORS 两道墙，浏览器里多半读不到：
+    // 识别为 0 是常态，必须明说，不能让用户以为地区筛选已生效
+    $('bigInfo').textContent += ' · 落地地区没能识别（浏览器限制：直连 IP 读 trace 多被证书/CORS 拦下，此功能仅偶尔可用）';
   }
 }
 async function scanBig(){
@@ -1188,14 +1221,14 @@ async function scanBig(){
       BIGRES[i] = await probe(`${BIG[i].ip}:${BIG[i].port}`, 5000);
       if(BIGRES[i] >= 0) okN++;
       doneN++;
-      if(doneN % 50 === 0 || doneN === total){ $('bigInfo').textContent = `检测中… ${doneN}/${total} · 可用 ${okN}`; renderBig(); }
+      if(doneN % 50 === 0 || doneN === total){ $('bigInfo').textContent = `检测中… ${doneN}/${total} · 确认可达 ${okN}`; renderBig(); }
     }
   }
   await Promise.all(Array.from({ length: 16 }, worker));
   renderBig();
   $('bigInfo').textContent = bigScanning
-    ? `检测完成：${okN}/${total} 可用（浏览器握手探测，仅作相对比较）`
-    : `已停止：测了 ${doneN}/${total}，可用 ${okN}`;
+    ? `检测完成：${okN}/${total} 确认可达（浏览器探测，未确认≠不可用，仅作相对比较）`
+    : `已停止：测了 ${doneN}/${total}，确认可达 ${okN}`;
   $('btnBigCopyOk').disabled = okN === 0;
   $('btnBigCopyOk').textContent = `只复制可用的（${okN}）`;
   bigScanning = false;
@@ -1254,11 +1287,11 @@ $('btnBigSnap').addEventListener('click', async () => {
       body: JSON.stringify({ text: lines.join('\n') }),
     });
     const j = await r.json().catch(() => null);
-    if(!r.ok || !j || !j.url) throw 0;
+    if(!r.ok || !j || !j.url) throw (j && j.error) || 0;
     $('bigSnapUrl').value = j.url;
     $('bigSnapRow').style.display = '';
     toast(`已存大池快照订阅：${lines.length} 条${scope === 'ok' ? '（检测可用的）' : '（全部采样）'}`);
-  }catch(e){ toast('存快照失败，稍后再试'); }
+  }catch(e){ toast(typeof e === 'string' ? `存快照失败：${e}` : '存快照失败，稍后再试'); }
   $('btnBigSnap').disabled = false;
 });
 $('btnBigSnapCopy').addEventListener('click', () => copyText($('bigSnapUrl').value, '已复制快照订阅链接'));
@@ -1310,7 +1343,7 @@ function resolveRecheckUrl(){
   return sel;
 }
 function saveRecheck(){
-  localStorage.setItem('cfipRecheck', JSON.stringify({
+  LS.set('cfipRecheck', JSON.stringify({
     sel: $('recheckSel').value, custom: $('recheckCustom').value }));
 }
 $('recheckSel').addEventListener('change', () => {
@@ -1322,7 +1355,7 @@ $('btnRecheck').addEventListener('click', async () => {
   const url = resolveRecheckUrl();
   if(!url){ toast('先在下方填好自定义监测站地址'); return; }
   await copyText(formatLines(RESULT).join('\n'), '已复制清单，去复检站核对');
-  window.open(url, '_blank');
+  window.open(url, '_blank', 'noopener');
 });
 $('vbarClose').addEventListener('click', () => { $('visitorbar').style.display = 'none'; });
 const PROV_ZH = {Beijing:'北京',Shanghai:'上海',Tianjin:'天津',Chongqing:'重庆','Inner Mongolia':'内蒙古','Inner Mongolia Autonomous Region':'内蒙古',Xinjiang:'新疆',Tibet:'西藏',Ningxia:'宁夏',Guangxi:'广西','Hong Kong':'香港',Macau:'澳门',Macao:'澳门',Taiwan:'台湾',Shaanxi:'陕西',Sichuan:'四川',Guangdong:'广东',Jiangsu:'江苏',Zhejiang:'浙江',Shandong:'山东',Henan:'河南',Hubei:'湖北',Hunan:'湖南',Hebei:'河北',Shanxi:'山西',Liaoning:'辽宁',Jilin:'吉林',Heilongjiang:'黑龙江',Anhui:'安徽',Fujian:'福建',Jiangxi:'江西',Hainan:'海南',Guizhou:'贵州',Yunnan:'云南',Gansu:'甘肃',Qinghai:'青海'};
@@ -1345,7 +1378,6 @@ function renderVisitor(v){
   else if(/联通|Unicom/i.test(isp)) carrier = '联通';
   else if(/广电|Broadcast/i.test(isp)) carrier = '广电';
   const carrierZh = {'移动': '中国移动', '电信': '中国电信', '联通': '中国联通', '广电': '中国广电'}[carrier] || '';
-  const near = /陕西|Shaanxi/i.test(region);
   window.__netLabel = `${place}${carrier ? ` · ${carrier}` : (isp ? ` · ${isp}` : '')}`;
   if(typeof updBigMeta === 'function') updBigMeta();
   const asnTxt = /^AS?\d+$/i.test(v.asn || '') ? `ASN 编号 AS${String(v.asn).replace(/^AS/i, '')}` : '';
@@ -1357,8 +1389,7 @@ function renderVisitor(v){
   $('vbarText').innerHTML = `📍 你的出口：${v.ip ? `<b>${esc(v.ip)}</b> · ` : ''}<b>${esc(place)}</b>` +
     `${carrierZh ? ` · <b>${esc(carrierZh)}</b>` : (isp ? ` · <b>${esc(isp)}</b>` : '')}` +
     (detail ? `<br><span style="color:var(--dim);font-size:12px">${esc(detail)}</span>` : '') +
-    `<br>` + (near ? '与主力实测源在同一地区，页面标注数据对你参考价值高。'
-          : '页面标注速度是各源测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。');
+    `<br>` + '页面标注速度是各源在其测试地的数据，与你本地会有出入，建议先「检测本地可用」按你自己的网络筛选。';
   if(carrier){
     const b = $('vbarBtn');
     b.style.display = '';
@@ -1436,6 +1467,14 @@ $('btnV6CopyOk').addEventListener('click', () => {
   const ok = POOL6.filter(l => { const k = (l.match(/^\[[^\]]+\]:\d+/) || [l])[0]; return lat6[k] !== undefined && lat6[k] >= 0; });
   copyText(formatLines(ok).join('\n'), `已复制可用 IPv6 ${ok.length} 条`);
 });
+// 地址栏 # 与页签/配置共用：在已打开的页面里换上另一个 #c= 配置链接
+// （或用前进/后退切回）时整页重载重新初始化，避免新旧配置半混着用
+let __lastHash = location.hash;
+window.addEventListener('hashchange', () => {
+  if(location.hash === __lastHash) return;
+  __lastHash = location.hash;
+  if(location.hash.startsWith('#c=')) location.reload();
+});
 $('btnV6Sub').addEventListener('click', () => copyText(buildSubUrl(true), '已复制 IPv6 订阅链接'));
 $('btnTopCopy').addEventListener('click', () =>
   copyText(formatLines(TOPLINES).join('\n'), `已复制今日推荐 ${TOPLINES.length} 条`));
@@ -1458,17 +1497,21 @@ $('btnTopLink').addEventListener('click', () =>
     return;
   }
   loadCfg();
+  // meta 字段一律兜底取值：聚合端某轮少写字段时页面不能整页初始化失败
+  const SRCS = Array.isArray(META.sources) ? META.sources : [];
+  const FB_N = Array.isArray(META.fallback_sources) ? META.fallback_sources.length : 0;
   $('stats').innerHTML =
-    `<span class="chip">全球池 <b>${META.total}</b> 条</span>` +
+    `<span class="chip">全球池 <b>${META.total || 0}</b> 条</span>` +
     `<span class="chip">覆盖 <b>${Object.keys(META.regions || {}).filter(k => k !== 'SW').length}</b> 个地区</span>` +
     `<span class="chip">IPv6 <b>${META.v6_total || 0}</b> 条</span>` +
     `<span class="chip">优选域名 <b id="statDomN">${META.domains_total || 0}</b> 个</span>` +
-    `<span class="chip">数据源 <b>${META.sources.filter(s=>s.ok).length}/${META.sources.length}</b> 正常</span>` +
-    `<span class="chip">更新于 <b>${esc(META.generated_at)}</b></span>`;
+    `<span class="chip">数据源 <b>${SRCS.filter(s=>s.ok).length}/${SRCS.length}</b> 正常</span>` +
+    (FB_N ? `<span class="chip">⚠ <b>${FB_N}</b> 个源在沿用上轮数据</span>` : '') +
+    `<span class="chip">更新于 <b>${esc(META.generated_at || '—')}</b></span>`;
   $('links').innerHTML =
     `<div>🏆 今日推荐 Top 20（前 20 名，${META.top ? META.top.count : 20} 条） <a href="data/top.txt" target="_blank" rel="noopener">${new URL('data/top.txt', location.href).href}</a>` +
     `<button class="pbtn" data-link="data/top.txt">复制</button></div>` +
-    Object.entries(META.groups).map(([k, g]) =>
+    Object.entries(META.groups || {}).map(([k, g]) =>
     `<div>${esc(g.name)}（${g.count} ${k === 'domains' ? '个' : '条'}） <a href="${esc(g.file)}" target="_blank" rel="noopener">${new URL(g.file, location.href).href}</a>` +
     `<button class="pbtn" data-link="${esc(g.file)}">复制</button></div>`).join('') +
     `<div>IPv6 池（${META.v6_total || 0} 条） <a href="data/all6.txt" target="_blank" rel="noopener">${new URL('data/all6.txt', location.href).href}</a>` +
@@ -1517,15 +1560,19 @@ $('btnTopLink').addEventListener('click', () =>
     `<button class="pbtn" data-link="${u}">复制</button></div>`).join('');
   document.querySelectorAll('[data-link]').forEach(b => b.addEventListener('click', () =>
     copyText(new URL(b.dataset.link, location.href).href, '已复制直链')));
-  $('sources').innerHTML = META.sources.map(s =>
+  $('sources').innerHTML = SRCS.map(s =>
     `<div>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}</a>` : esc(s.name)}` +
-    `<span class="st${s.ok ? '' : ' fail'}">${s.ok ? `已聚合 ${s.lines_used} 条` : '抓取失败'}</span>` +
+    `<span class="st${s.ok ? '' : ' fail'}">${s.ok ? `已聚合 ${s.lines_used} 条` : (s.lines_used ? `本轮失败 · 沿用上轮 ${s.lines_used} 条` : '抓取失败')}</span>` +
     `<span class="tag"> · ${esc(s.note)}</span>` +
     `<div class="srcsub">拉取 ${s.lines_in} 条 · 源站更新：${esc(s.cadence || '—')} · 本站本轮抓取：${esc(s.fetched_at || '—')}</div></div>`).join('');
   getText('data/top.txt').then(t => renderTop(t.split('\n').map(s => s.trim()).filter(Boolean))).catch(() => {});
   getText('data/domains.txt').then(t => {
     const list = t.split('\n').map(s => s.trim()).filter(Boolean).map(l => {
-      const [dom, label] = l.split('#');
+      // 只在第一个 # 处切分（与聚合端 partition 口径一致）：标签里带 # 时
+      // split('#') 解构会把后半段截掉
+      const i = l.indexOf('#');
+      const dom = i < 0 ? l : l.slice(0, i);
+      const label = i < 0 ? '' : l.slice(i + 1);
       return {dom, label: label || 'svip-s 收集'};
     });
     const carrierDoms = new Set(CARRIER_DOMAINS.map(d => d.dom));
@@ -1536,7 +1583,7 @@ $('btnTopLink').addEventListener('click', () =>
     if(sdn) sdn.textContent = DOMAINS.length;
     // 恢复本轮数据（generated_at 未变）下的上次实测结果，刷新不丢
     try{
-      const saved = JSON.parse(localStorage.getItem('cfipDomRes') || 'null');
+      const saved = JSON.parse(LS.get('cfipDomRes') || 'null');
       if(saved && META && saved.gen === META.generated_at && saved.list){
         DOMRES = {ok: saved.list.length, total: saved.total,
                   list: saved.list.map(([dom, ms]) => ({dom, ms}))};
@@ -1554,7 +1601,7 @@ $('btnTopLink').addEventListener('click', () =>
   getText('data/all6.txt').then(t => {
     POOL6 = t.split('\n').map(s => s.trim()).filter(Boolean);
     try{
-      const saved = JSON.parse(localStorage.getItem('cfipV6Res') || 'null');
+      const saved = JSON.parse(LS.get('cfipV6Res') || 'null');
       if(saved && META && saved.gen === META.generated_at && saved.lat6){
         Object.assign(lat6, saved.lat6);
         const ok = POOL6.filter(l => lat6[l.match(/^\[[^\]]+\]:\d+/)[0]] >= 0).length;
@@ -1570,11 +1617,11 @@ $('btnTopLink').addEventListener('click', () =>
     $('history').innerHTML = h.slice(0, 6).map(x =>
       `<div>${x.at} · IPv4 ${x.total} 条 · IPv6 ${x.v6} 条 · ${x.regions} 个地区 · 域名 ${x.domains} 个</div>`).join('');
   }).catch(() => {});
-  const savedFreq = localStorage.getItem('cfipAggFreq');
+  const savedFreq = LS.get('cfipAggFreq');
   if(savedFreq) $('aggFreq').value = savedFreq;
   refreshAggNote();
   try{
-    const rc = JSON.parse(localStorage.getItem('cfipRecheck') || 'null');
+    const rc = JSON.parse(LS.get('cfipRecheck') || 'null');
     if(rc){ $('recheckSel').value = rc.sel || 'https://ipcheck.ing';
       $('recheckCustom').value = rc.custom || '';
       $('recheckCustom').style.display = $('recheckSel').value === 'custom' ? '' : 'none'; }
