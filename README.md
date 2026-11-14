@@ -560,7 +560,7 @@ A：Fork 的仓库默认禁用 Actions，到仓库 Actions 页手动启用；另
 A：可以。编辑 `seed-usjp.txt` 加静态条目；或改 `scripts/aggregate.py` 的源列表加新源（需能解析出地区）。
 
 **Q：新 Cloudflare 账号点「连接 GitHub」一直跳回应用设置页，看不到仓库？**
-A：GitHub 上的「Cloudflare Workers and Pages」应用只能绑定一个 Cloudflare 账号。若你的 GitHub 已绑过另一个 CF 账号，新账号就连不上（卸载重装会断开旧账号项目的 Git 部署，慎重）。解法是走**令牌直推**：完整步骤已整合到上方[快速部署](#快速部署)的「路线 B：令牌直推」小节（先直传建一个名为 `ym-cfip` 的项目，再配两个 Secrets），照着做即可，这里不再重复。
+A：GitHub 上的「Cloudflare Workers and Pages」应用只能绑定一个 Cloudflare 账号。若你的 GitHub 已绑过另一个 CF 账号，新账号就连不上（卸载重装会断开旧账号项目的 Git 部署，慎重）。解法是走**令牌直推**：完整步骤已整合到上方[方式一：全自动](#方式一全自动fork--配-secrets--工作流自己跑)（先直传建一个名为 `ym-cfip` 的项目，再配两个 Secrets），照着做即可，这里不再重复。
 
 **Q：Fork 后工作流里「推送部署」那步需要我处理吗？**
 A：不需要。没配上述两个 Secrets 时该步自动跳过，聚合与数据提交照常；连 Git 部署的用户本来也用不到它。
