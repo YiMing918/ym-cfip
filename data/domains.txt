@@ -44,6 +44,7 @@ nexusmods.com#NexusMods · BestCF
 glassdoor.com#Glassdoor · BestCF
 www.jimdo.com#Jimdo · BestCF
 openai.com#OpenAI · BestCF
+jobsdb.com#JobsDB · BestCF
 www.sage.com#Sage · BestCF
 www.speedtest.net#Ookla · BestCF
 investor.apple.com#Apple · BestCF
@@ -125,7 +126,6 @@ www.stheadline.com#香港星岛头条 · BestCF亚洲
 www.mplus.org.hk#香港M+博物馆 · BestCF亚洲
 citysuper.com.hk#中国香港CitySuper · BestCF亚洲
 yesstyle.com#中国香港YesStyle · BestCF亚洲
-jobsdb.com#中国香港JobsDB · BestCF亚洲
 www.yata.hk#中国香港一田百货 · BestCF亚洲
 pfizer.com.hk#中国香港辉瑞 · BestCF亚洲
 cyberport.com.hk#中国香港数码港 · BestCF亚洲
@@ -408,6 +408,7 @@ totoro.im#CF 官方域名 · cmliu
 ikankeji.com#CF 官方域名 · cmliu
 c-power.com.cn#CF 官方域名 · cmliu
 www.mfyx.cn#CF 官方域名 · cmliu
+cnllm.com#CF 官方域名 · cmliu
 www.xiaoshuofen.com#CF 官方域名 · cmliu
 www.4429.com.cn#CF 官方域名 · cmliu
 101yaoye.com#CF 官方域名 · cmliu
@@ -469,7 +470,6 @@ www.oopt.eu.cc#CF 官方域名 · cmliu
 api.gzcrtw.com#CF 官方域名 · cmliu
 jojolsj.jojojing.top#CF 官方域名 · cmliu
 salaryexpert.com#CF 官方域名 · cmliu
-www.xflash.vip#CF 官方域名 · cmliu
 www.vastnovel.com#CF 官方域名 · cmliu
 glitterx.cloud#CF 官方域名 · cmliu
 auto.dolby.dpdns.org#CF 官方域名 · cmliu
@@ -541,6 +541,7 @@ cf.drxian.dpdns.org#CF 官方域名 · cmliu
 53.fs1.hubspotusercontent-na1.net#CF 官方域名 · cmliu
 i.pixiv.re#CF 官方域名 · cmliu
 s.ee#CF 官方域名 · cmliu
+cdn.667891.xyz#CF 官方域名 · cmliu
 cf.xreak.top#CF 官方域名 · cmliu
 cf.777791.xyz#CF 官方域名 · cmliu
 brandstudio.com#CF 官方域名 · cmliu
