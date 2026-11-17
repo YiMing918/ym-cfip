@@ -1,6 +1,6 @@
 # YM 优选 IP · Cloudflare 全球优选清单站
 
-![version](https://img.shields.io/badge/version-v1.17-orange)
+![version](https://img.shields.io/badge/version-v1.18-orange)
 ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue)
 ![update](https://img.shields.io/badge/数据-自动聚合-green)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
@@ -797,6 +797,7 @@ docs/                       README 里用到的截图
 
 ## 版本历史
 
+- **v1.18（2026-11-17）**：外部审计核验后修复两项。①**快照保存改先占额再写对象**：旧顺序先写快照后加计数，计数没落库时留下永不计数的快照、限额被绕过。现先把计数落库占额、占额后复核全站总量（超限退额拒绝、不写对象）、写对象失败同样退额——计数先于对象，方向保守不漏计。②**订阅参数严格校验**：`n`/`rn`/`ui`/`ms`/`mbps` 改全串正则匹配，`n=1abc`、`rn=JP.1x`、`ms=1.5x` 这类半截合法值不再被 parseInt/parseFloat 悄悄接受，一律回 400 注明参数名。新增 tests/audit-fixes.mjs 20 项全过。
 - **文档增补（2026-11-14）**：新增「出事了怎么办」一节（KV 被删、工作流被停用、连续红灯、令牌失效、Pages 项目被删、数据文件损坏、域名过期、仓库被删八种情况的后果与重建步骤），并在「新手先看这里」补费用总账、安全提醒、手机与电脑分工三小节，另加术语速查表。纯文档更新，不升版本号，功能仍为 v1.17。
 
 - **文档（2026-11-14）**：README 按「新手向全套运维文档」规格重写——新增部署前准备清单、部署总览、三种部署方式的逐步说明（每步写明去哪个页面、点哪个按钮、做完应该看到什么）、令牌与账号 ID 的五点说明（是什么 / 去哪拿 / 填到哪 / 干什么用 / 丢了怎么办），以及探活、保活、自动任务运维章节。纯文档更新，不升版本号，功能仍为 v1.17。

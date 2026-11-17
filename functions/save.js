@@ -124,16 +124,46 @@ export async function onRequestPost(context) {
   // 全站总量与各来源 IP——此前只有每 IP 上限，换几个 IP 就能把全站每日
   // 1000 次写额度打满；现加全站每日上限 200 次新快照（每次 2 写、全天
   // 最多 400 写封顶）。KV 无原子计数，并发下计数是尽力而为，总量级受控。
+  //
+  // 占额顺序（2026-11-17 审计核验 #4）：旧顺序是「先写快照、后加计数」，
+  // 写完快照后计数没落库（崩溃/并发覆盖）就留下一个永不计数的快照，限额
+  // 被绕过且无账可查。现改为先占额再写对象：
+  //   1) 先把计数 +1 落库（占额）；
+  //   2) 占额后复核：重新读计数，若全站总量已超上限（并发把额度抢超了），
+  //      退还本次占额并拒绝——超限快照根本不写出；
+  //   3) 写快照失败同样退还占额。
+  // KV 没有 CAS，这仍是尽力而为，但保证了「计数先于对象」：新路径不再产生
+  // 未计数的快照；计数只可能多计（占额后异常未退还），方向是保守的。
   const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
   const day = new Date().toISOString().slice(0, 10);
   const rlKey = "rl:save:" + day;
-  let doc = { total: 0, ips: {} };
-  try { doc = JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || doc; } catch (e) { /* 计数文档损坏按零起算 */ }
+  const readDoc = async () => {
+    try { return JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || { total: 0, ips: {} }; }
+    catch (e) { return { total: 0, ips: {} }; /* 计数文档损坏按零起算 */ }
+  };
+  const writeDoc = d => context.env.SNAP.put(rlKey, JSON.stringify(d), { expirationTtl: 2 * 24 * 3600 });
+  const release = async () => {
+    const d = await readDoc();
+    d.total = Math.max(0, d.total - 1);
+    d.ips[ip] = Math.max(0, (d.ips[ip] || 0) - 1);
+    await writeDoc(d).catch(() => {});
+  };
+  let doc = await readDoc();
   if ((doc.ips[ip] || 0) >= 100 || doc.total >= 200)
     return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
-  await context.env.SNAP.put("snap:" + id, stored, { expirationTtl: 180 * 24 * 3600 });
   doc.total += 1;
   doc.ips[ip] = (doc.ips[ip] || 0) + 1;
-  await context.env.SNAP.put(rlKey, JSON.stringify(doc), { expirationTtl: 2 * 24 * 3600 });
+  await writeDoc(doc); // 先占额
+  const after = await readDoc(); // 占额后全站复核
+  if (after.total > 200) {
+    await release();
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
+  }
+  try {
+    await context.env.SNAP.put("snap:" + id, stored, { expirationTtl: 180 * 24 * 3600 });
+  } catch (e) {
+    await release();
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
   return new Response(JSON.stringify({ id, url: new URL("/s/" + id, context.request.url).href }), { headers });
 }

@@ -106,15 +106,27 @@ async function loadPool(context, origin, file) {
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const q = url.searchParams;
-  const ui = parseInt(q.get("ui") || "", 10);
   const headers = { "content-type": "text/plain; charset=utf-8", "cache-control": "no-cache" };
-  if (!isNaN(ui) && ui > 0) headers["profile-update-interval"] = String(ui);
 
   const badParam = name => new Response(
     `# 参数错误：${name} 的取值不合法，请检查订阅链接\n`,
     { status: 400, headers });
-  const nAll = parseInt(q.get("n") || "", 10);
-  if (q.get("n") !== null && (isNaN(nAll) || nAll < 1)) return badParam("n");
+  // 数值参数严格全串校验（2026-11-17 审计核验 #9）：parseInt/parseFloat 会
+  // 部分接受 "1abc"、"1.5x"，拼错的订阅链接被悄悄当成别的值用，排查困难。
+  // 一律先过正则全串匹配，非法直接 400（与 mode/group 等参数的既有口径一致）。
+  const INT_RE = /^\d+$/;
+  const NUM_RE = /^\d+(\.\d+)?$/;
+  const uiRaw = q.get("ui");
+  let ui = NaN;
+  if (uiRaw !== null) {
+    if (!INT_RE.test(uiRaw) || Number(uiRaw) < 1) return badParam("ui");
+    ui = Number(uiRaw);
+  }
+  if (!isNaN(ui) && ui > 0) headers["profile-update-interval"] = String(ui);
+
+  const nRaw = q.get("n");
+  const nAll = nRaw !== null && INT_RE.test(nRaw) ? Number(nRaw) : NaN;
+  if (nRaw !== null && (isNaN(nAll) || nAll < 1)) return badParam("n");
   const carrier = q.get("carrier") || "";
   const carrierSet = new Set(carrier.split(",").map(x => x.trim()).filter(Boolean));
   const mode = q.get("mode") || "";
@@ -143,17 +155,19 @@ export async function onRequest(context) {
     (q.get("rn") || "").split(",").forEach(part => {
       if (!part.trim()) return;
       const [cc, v] = part.split(".");
-      const num = v ? parseInt(v, 10) : NaN;
+      const num = v && INT_RE.test(v) ? Number(v) : NaN;
       // rn 值非法/为负：整单 400，不再静默吞掉（原实现把 NaN 存进 rn 时
       // slice(0, NaN) 会把该地区悄悄清空，负数则悄悄给空，都难以排查）
       if (!cc || Number.isNaN(num) || num < 0) { rnBad = true; return; }
       rn[cc.trim().toUpperCase()] = num;
     });
     if (rnBad) return badParam("rn");
-    const maxMs = parseFloat(q.get("ms") || "");
-    if (q.get("ms") !== null && isNaN(maxMs)) return badParam("ms");
-    const minMbps = parseFloat(q.get("mbps") || "");
-    if (q.get("mbps") !== null && isNaN(minMbps)) return badParam("mbps");
+    const msRaw = q.get("ms");
+    const maxMs = msRaw !== null && NUM_RE.test(msRaw) ? Number(msRaw) : NaN;
+    if (msRaw !== null && isNaN(maxMs)) return badParam("ms");
+    const mbpsRaw = q.get("mbps");
+    const minMbps = mbpsRaw !== null && NUM_RE.test(mbpsRaw) ? Number(mbpsRaw) : NaN;
+    if (mbpsRaw !== null && isNaN(minMbps)) return badParam("mbps");
     const ports = q.get("ports") || "all";
     if (!["all", "443", "tls"].includes(ports)) return badParam("ports");
 
