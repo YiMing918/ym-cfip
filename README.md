@@ -1,11 +1,8 @@
 # YM 优选 IP · Cloudflare 全球优选清单站
 
-![version](https://img.shields.io/badge/version-v1.18-orange)
-![platform](https://img.shields.io/badge/Cloudflare-Pages-blue)
-![update](https://img.shields.io/badge/数据-自动聚合-green)
-![license](https://img.shields.io/badge/license-MIT-lightgrey)
-
 多源聚合的 Cloudflare 优选 IP 站：**全球 1000+ 条、60+ 个地区、优选域名 800+ 个**，地区/运营商/数量/延迟/速度全都能自己选，浏览器本地实测可用性，一键生成可**自动更新的订阅链接**。纯静态 + Pages Functions，免费额度内运行，GitHub Actions 定时聚合数据。
+
+![version](https://img.shields.io/badge/version-v1.18-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **[打开站点](https://yxip.1m.us.ci) · [下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
 
