@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import sys
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -150,14 +151,58 @@ def _v6_ok(ip):
         return False
 
 
+# 抓取上限（C-18）：旧版 resp.read() 无大小上限、单步 timeout 只管「多久
+# 没动静」——超大响应能把内存/带宽吃满，慢速滴水（一直有数据、永不读完）
+# 能把一轮聚合拖死。现流式分块读：累计超 MAX_FETCH_BYTES 放弃该源、
+# 每源总时长（一个源的全部备用地址合计）超 FETCH_DEADLINE_SEC 放弃，
+# 都走原有的「该源失败 → 下一备用地址 / 上轮兜底」路径，函数签名不变。
+MAX_FETCH_BYTES = 16 * 1024 * 1024
+FETCH_DEADLINE_SEC = 60
+
+
+class _FetchTooBig(Exception):
+    pass
+
+
+class _FetchTooSlow(Exception):
+    pass
+
+
+def _read_limited(resp, deadline):
+    """分块读响应体：超大小上限或超总截止时间即抛错放弃（滴水也算总时长）。
+
+    必须用 read1（至多一次底层接收就返回）：普通 read(n) 会在内部一直
+    等到攒满 n 字节或读完为止，滴水源每隔一会儿来一字节就能把一次
+    read 拖到天荒地老，总截止时间根本没机会检查。
+    """
+    read_chunk = getattr(resp, "read1", None) or resp.read
+    chunks, total = [], 0
+    while True:
+        if time.monotonic() > deadline:
+            raise _FetchTooSlow("total time budget exceeded")
+        chunk = read_chunk(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FETCH_BYTES:
+            raise _FetchTooBig(f"body exceeds {MAX_FETCH_BYTES} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def fetch(urls):
     if isinstance(urls, str):
         urls = [urls]
+    deadline = time.monotonic() + FETCH_DEADLINE_SEC
     for url in urls:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(f"[warn] fetch skipped {url}: source time budget exhausted", file=sys.stderr)
+            break
         try:
             req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=25) as resp:
-                return resp.read().decode("utf-8", "replace"), url
+            with urllib.request.urlopen(req, timeout=min(25, remaining)) as resp:
+                return _read_limited(resp, deadline).decode("utf-8", "replace"), url
         except Exception as exc:  # noqa: BLE001
             print(f"[warn] fetch failed {url}: {exc}", file=sys.stderr)
     return None, urls[0]
@@ -188,8 +233,9 @@ def fetch_json(url, payload=None):
             data = json.dumps(payload).encode()
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, headers=headers, data=data)
+        deadline = time.monotonic() + FETCH_DEADLINE_SEC
         with urllib.request.urlopen(req, timeout=25) as resp:
-            return json.loads(resp.read().decode("utf-8", "replace"))
+            return json.loads(_read_limited(resp, deadline).decode("utf-8", "replace"))
     except Exception as exc:  # noqa: BLE001
         print(f"[warn] api failed {url}: {exc}", file=sys.stderr)
     return None
@@ -320,13 +366,33 @@ API_DISPLAY_URL = {
 }
 
 
+# 标签清洗（C-43）：与 save.js 的 LABEL_RE 同口径——标签里不许有 < > [ ]
+# 与控制字符、限长 60。聚合产物最终会被页面拼进 HTML、也会被 /save 按
+# LABEL_RE 复验，源站标签不清洗等于把任意文本带进本站口径。
+_LABEL_BAD_RE = re.compile(r"[<>\[\]\x00-\x1f\x7f]")
+
+
+def clean_label(label):
+    return _LABEL_BAD_RE.sub("", str(label or "")).strip()[:60]
+
+
 def parse_native(text):
     out = []
     for raw in text.splitlines():
         line = raw.strip()
         m = NATIVE_RE.match(line)
         if m and valid_ipv4(m.group(1)) and valid_port(m.group(2)) and not PRIVATE_RE.match(m.group(1)):
-            out.append(line)
+            label = m.group(4)
+            if label is None:
+                out.append(line)
+                continue
+            cleaned = clean_label(label)
+            if cleaned == label:
+                out.append(line)
+            elif cleaned:
+                out.append(f"{m.group(1)}:{m.group(2)}#{m.group(3)} [{cleaned}]")
+            else:
+                out.append(f"{m.group(1)}:{m.group(2)}#{m.group(3)}")
     return out
 
 
@@ -801,7 +867,7 @@ def parse_domains(text, fmt, default_label=""):
             dom, label = line.split()[0], default_label
         dom = dom.strip().lower().rstrip(".")
         if DOM_RE.match(dom):
-            out.append((dom, label))
+            out.append((dom, clean_label(label)))
     return out
 
 

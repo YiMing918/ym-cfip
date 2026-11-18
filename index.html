@@ -412,7 +412,7 @@ const COLO_CN = {SIN:'新加坡', HKG:'香港', NRT:'东京', KIX:'大阪', ICN:
   FRA:'法兰克福', LHR:'伦敦', CDG:'巴黎', AMS:'阿姆斯特丹', MAD:'马德里', ZRH:'苏黎世',
   SYD:'悉尼', MEL:'墨尔本', BNE:'布里斯班', AKL:'奥克兰', BOM:'孟买', DEL:'德里',
   GRU:'圣保罗', YYZ:'多伦多', YVR:'温哥华', KUL:'吉隆坡', BKK:'曼谷', HAN:'河内', MNL:'马尼拉', CGK:'雅加达'};
-const coloZh = c => c ? (COLO_CN[c] ? `${c} ${COLO_CN[c]}` : c) : '';
+const coloZh = c => esc(c ? (COLO_CN[c] ? c + ' ' + COLO_CN[c] : c) : '');
 const CARRIER_DOMAINS = [
   {dom:'cf.090227.xyz', label:'社区分流 · 三网自适应'},
   {dom:'cmcc.090227.xyz', label:'社区分流 · 移动'},
@@ -838,7 +838,7 @@ async function testDomains(){
       let colo = '', ip = '';
       try{
         const txt = await r.text();
-        colo = (txt.match(/loc=(\S+)/) || [])[1] || '';
+        colo = (txt.match(/loc=([A-Z]{2})/) || [])[1] || '';
         ip = (txt.match(/ip=(\S+)/) || [])[1] || '';
       }catch(e){}
       return {ms, colo, ip};

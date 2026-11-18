@@ -106,6 +106,17 @@ function lineOk(l) {
 
 export async function onRequestPost(context) {
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-cache" };
+  // 来源校验（C-25，与 ym-cf-panel _auth.js 同款）：带 Origin 时其 host 必须
+  // 与请求 URL 的 host 一致，不一致直接 403；不带 Origin 的维持现状（脚本
+  // 直调等无 Origin 客户端不受影响）。/save 是匿名写 KV 的入口，跨站页面
+  // 借访客浏览器发 POST 刷保存额度/塞快照这条路要先堵上。
+  const origin = context.request.headers.get("Origin");
+  if (origin) {
+    let ok = false;
+    try { ok = new URL(origin).host === new URL(context.request.url).host; } catch { ok = false; }
+    if (!ok)
+      return new Response(JSON.stringify({ error: "bad origin（请求来源不对）" }), { status: 403, headers });
+  }
   if (!context.env || !context.env.SNAP)
     return new Response(JSON.stringify({ error: "snapshot storage not configured（快照存储未配置：本站未绑定 SNAP KV）" }), { status: 501, headers });
   const body = await context.request.json().catch(() => null);

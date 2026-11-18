@@ -2,7 +2,7 @@
 
 多源聚合的 Cloudflare 优选 IP 站：**全球 1000+ 条、60+ 个地区、优选域名 800+ 个**，地区/运营商/数量/延迟/速度全都能自己选，浏览器本地实测可用性，一键生成可**自动更新的订阅链接**。纯静态 + Pages Functions，免费额度内运行，GitHub Actions 定时聚合数据。
 
-![version](https://img.shields.io/badge/version-v1.19-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+![version](https://img.shields.io/badge/version-v1.20-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **[下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
 
@@ -794,6 +794,7 @@ docs/                       README 里用到的截图
 
 ## 版本历史
 
+- **v1.20（2026-11-18）**：对抗式复读修复四项。①**抓取加上限**：聚合脚本以前把响应整个读进来才罢休，源站回个超大文件能吃满内存、慢速滴水能把一轮聚合拖死；现改成边读边数，单个源超过 16MB 或总时长超过 60 秒就放弃这个源、走原有的备用地址/上轮数据兜底。②**域名实测的地区码改严格识别**：以前 trace 里 `loc=` 后面跟什么都往页面上拼，现与大池同口径只认两位大写地区码，机房名显示前再过一遍转义。③**保存接口查来源**：`/save` 以前不看来路，现带 Origin 的请求必须与本站同源才给存（不带 Origin 的脚本直调不受影响）。④**聚合标签先清洗**：源站标签进产物前去掉尖括号、方括号与控制字符并限长 60，与保存接口的标签口径对齐。另备好工作流改版（数据没变化时不再白跑一遍部署），待手动替换后生效。定向测试：抓取上限/标签清洗 12 项 + 保存来源/地区码 7 项（改前共 12 项失败、改后全过），既有测试 11+20 项不回归。
 - **v1.19（2026-11-18）**：外部审计核验后修复三项。①**订阅 `fmt=` 空值不再丢节点名**：空模板原会把每行名字替换光、只剩裸地址，现空串等同未传、用默认命名。②**`rn` 点名的地区并入地区集**：只写 `rn=HK.5` 时 HK 原不在缺省地区里、一条不出还不报错，现并入后按量取。③**保存额度日界改北京时间**：原按 UTC 日期、北京时间 08:00 才换日，现与订阅 `{日期}` 同口径。新增 tests/sub-params.mjs 11 项定向测试（改前 4 项失败复现静默错、改后全过），既有 audit-fixes 20 项不回归。
 - **v1.18（2026-11-17）**：外部审计核验后修复两项。①**快照保存改先占额再写对象**：旧顺序先写快照后加计数，计数没落库时留下永不计数的快照、限额被绕过。现先把计数落库占额、占额后复核全站总量（超限退额拒绝、不写对象）、写对象失败同样退额——计数先于对象，方向保守不漏计。②**订阅参数严格校验**：`n`/`rn`/`ui`/`ms`/`mbps` 改全串正则匹配，`n=1abc`、`rn=JP.1x`、`ms=1.5x` 这类半截合法值不再被 parseInt/parseFloat 悄悄接受，一律回 400 注明参数名。新增 tests/audit-fixes.mjs 20 项全过。
 - **文档增补（2026-11-14）**：新增「出事了怎么办」一节（KV 被删、工作流被停用、连续红灯、令牌失效、Pages 项目被删、数据文件损坏、域名过期、仓库被删八种情况的后果与重建步骤），并在「新手先看这里」补费用总账、安全提醒、手机与电脑分工三小节，另加术语速查表。纯文档更新，不升版本号，功能仍为 v1.17。
