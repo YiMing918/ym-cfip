@@ -135,7 +135,10 @@ export async function onRequest(context) {
   const group = q.get("group") || "all";
   if (!["best", "full", "extra", "sw", "all"].includes(group)) return badParam("group");
   const fmtRaw = q.get("fmt");
-  const fmt = fmtRaw === null ? null : fmtRaw.slice(0, 300).replace(/[\r\n]/g, "");
+  // fmt= 空串等同未传：空模板进 applyFmt 会把每行名字替换光、只剩裸地址
+  // （v1.18 及以前的静默错：参数在但为空 → 节点名全丢且不报错）
+  const fmtClean = fmtRaw === null ? null : fmtRaw.slice(0, 300).replace(/[\r\n]/g, "");
+  const fmt = fmtClean === "" ? null : fmtClean;
 
   try {
     if (q.get("stack") === "6") {
@@ -162,6 +165,9 @@ export async function onRequest(context) {
       rn[cc.trim().toUpperCase()] = num;
     });
     if (rnBad) return badParam("rn");
+    // rn 点名的地区并入 regions：只写 rn=HK.5 时 HK 不在缺省 JP,US 里，
+    // 不并入就会在下面的池过滤被整地区跳过、一条不出还不报错
+    for (const cc of Object.keys(rn)) regions.add(cc);
     const msRaw = q.get("ms");
     const maxMs = msRaw !== null && NUM_RE.test(msRaw) ? Number(msRaw) : NaN;
     if (msRaw !== null && isNaN(maxMs)) return badParam("ms");

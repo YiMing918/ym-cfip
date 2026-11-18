@@ -135,7 +135,9 @@ export async function onRequestPost(context) {
   // KV 没有 CAS，这仍是尽力而为，但保证了「计数先于对象」：新路径不再产生
   // 未计数的快照；计数只可能多计（占额后异常未退还），方向是保守的。
   const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
-  const day = new Date().toISOString().slice(0, 10);
+  // 日界按北京时间（与 sub.js 的 {日期} 同口径）：用 UTC 日期会在北京
+  // 时间 08:00 才换日，「今日上限」对国内用户错位 8 小时
+  const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
   const rlKey = "rl:save:" + day;
   const readDoc = async () => {
     try { return JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || { total: 0, ips: {} }; }

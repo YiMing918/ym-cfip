@@ -25,7 +25,7 @@ const saveCtx = (kv, ip = '1.2.3.4') => ({
     body: JSON.stringify({ text: '126.217.78.118:443#JP1\n3.113.213.171:443#JP2' }),
   }),
 });
-const day = new Date().toISOString().slice(0, 10);
+const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); // 与 save.js 同口径（北京时间日界）
 const rlKey = 'rl:save:' + day;
 
 // 1) 正常保存：对象写出 + 计数 = 1
