@@ -4,7 +4,7 @@
 
 ![version](https://img.shields.io/badge/version-v1.19-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
-**[打开站点](https://yxip.1m.us.ci) · [下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
+**[下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
 
 > 本站只聚合公开优选源并做格式整理，**本身不测速**：每条数据的延迟/速度来自其源站在测试地的实测（页面与数据文件均标注来源与口径）。「本地可用 / 本地测速」是访客浏览器在**访客自己网络**上的现场探测。
 
