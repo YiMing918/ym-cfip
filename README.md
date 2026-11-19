@@ -2,7 +2,7 @@
 
 多源聚合的 Cloudflare 优选 IP 站：**全球 1000+ 条、60+ 个地区、优选域名 800+ 个**，地区/运营商/数量/延迟/速度全都能自己选，浏览器本地实测可用性，一键生成可**自动更新的订阅链接**。纯静态 + Pages Functions，免费额度内运行，GitHub Actions 定时聚合数据。
 
-![version](https://img.shields.io/badge/version-v1.21-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+![version](https://img.shields.io/badge/version-v1.22-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **[下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
 
@@ -793,6 +793,8 @@ docs/                       README 里用到的截图
 ```
 
 ## 版本历史
+
+- **v1.22（2026-11-19）**：原头 API 的 key 改走环境变量（v1.21 第⑥条留的尾巴收口）。微测、HostMonit 两家原头互备通道的 key 以前明文写在聚合脚本里（本是站方公开分发的免费码），现改为从环境变量读——微测读 `WEICE_KEY`、HostMonit 读 `HOSTMONIT_KEY`，代码与注释里不再留明文，日志打码照旧。**没配这两个变量会怎么样**：对应原头通道自动跳过（日志里各有一行不带 key 的提示），转载通道与上轮兜底照常用、聚合照常出数据；只有「微测 IPv6」这种只有原头一条路的源会先沿用上轮数据。**想配（可选，不配也能用）**：① 在仓库 Settings → Secrets and variables → Actions 里新建两个 Secrets，名字就叫 `WEICE_KEY` 和 `HOSTMONIT_KEY`，值用站方公开的免费码（微测官网文档页、HostMonit 网站前端里都能找到，就是以前写在代码里的那两个）；② 再给 `.github/workflows/update.yml` 的「抓取并聚合」步骤加上两行 env：`WEICE_KEY: ${{ secrets.WEICE_KEY }}` 与 `HOSTMONIT_KEY: ${{ secrets.HOSTMONIT_KEY }}`，下一轮自动生效。本地实测：不设变量整轮跑完（总池 1349 条，微测 IPv6 沿用上轮数据）、设假 key 三个原头通道都能走到调用并正常回落，日志里无 key 明文。
 
 - **v1.21（2026-11-19）**：安全修复轮（外部审计逐条核实后修）。①**总池加绝对地板**：以前总池跌幅保护连续两轮成立就放行新数据，总池被打到 0 也会当新常态发布、把站点清单清空；现总池为 0 或不足 5 条时永不放行——继续冻结上一轮数据，并让该轮工作流直接标红告警，上游整体故障时宁可停在旧数据。②**域名 DNS 筛选加整轮截止**：以前逐个解析域名没有总时限，解析挂死能把一轮聚合拖死；现整批解析 30 秒到点，未出结果的按解析失败筛除，本轮照常走完。③**订阅接口分清「文件缺失」和「真空池」**：数据文件读不到时回 502 并带 `# data unavailable` 标记，不再跟真空池一样回一份空清单；参数校验补强（地区代码格式、运营商只认四网、`n`/`rn` 加上限、纯空白 `fmt` 视为未设、`stack=6` 也先过全部参数校验）。④**页面「停止检测」真停**：所有扫描（全池/清单测速/域名/IPv6/大池）的在途请求登记统一管理，点停止立刻全断，不再等各自超时。⑤**快照保存占额写失败不再抛 500**，与退额路径同口径回 502 重试；快照读取加 id 格式校验；站点补 HSTS 安全头。⑥**日志不再带密钥**：原头 API 请求失败时日志会打印带 key 的完整地址，现 key 参数一律打码（key 本身仍在代码里的问题单独列为待处理，见仓库审计报告）。⑦**文档口径订正**：全文「探针逐个验活」类说法改为与代码一致（IP 只做格式/合法段校验 + 去重，不测速、不测活；域名池另做 DNS 解析筛选）；源失败口径统一为「先沿用上一轮数据、连续 6 轮才停用」；无地区剔除补明三网专区破例；外部调度器间隔改为如实的不固定表述；页面 meta 的「66+ 地区」改「60+」。另：冻结轮保存的兜底计数口径已与发布轮统一（本轮用掉的兜底次数在冻结轮也计数）。
 

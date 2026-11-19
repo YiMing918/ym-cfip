@@ -198,7 +198,7 @@ def _mask_url(url):
 
     微测原头 API 的 key 走 ?key=… 查询串（见 api_wetest），fetch_json
     失败时旧版直接 print 完整 url，key 就这么进了 Actions 日志。
-    key 本身的处置（硬编码改环境变量）另案待定，这里先堵日志泄露。
+    key 本身已改走环境变量（见下方原头 API 通道一节），这里继续堵日志泄露。
     """
     return re.sub(r"([?&](?:key|api_key|token)=)[^&#]+", r"\1***",
                   str(url), flags=re.I)
@@ -233,8 +233,13 @@ def with_twin(url):
 # ---------- 原头 API 通道（2026-11-08 深挖定位） ----------
 # 微测 / vvHan / CFYes(HostMonit) 三家已用源的上游原站接口：数据与转载同源，
 # 只作转载通道失效时的互备（解析口径单独适配），不另立源名、不重复计数。
-# 注：该 key 为站方公开分发的免费码——cf2dns 原仓库（ddgth/cf2dns）的 README/源码/默认配置与微测官网所链仓库（gacjie/cf2dns）均明文分发同一值，并注明可永久免费使用、与付费码仅数据时效不同（2026-11-09 核查）；非个人申请密钥。
-WETEST_API_KEY = "o1zrmHAF"  # 微测官方文档页公开的示例 key，仅作兜底；失效自动回落 txt 通道
+# 微测与 HostMonit 两家的 key 改从环境变量读（2026-11-19）：微测读 WEICE_KEY、
+# HostMonit 读 HOSTMONIT_KEY，由 update.yml 从仓库 Secrets 注入。没配或为空
+# 时对应原头通道直接跳过（各打一条不带 key 的日志），转载 txt 通道与上轮
+# 兜底照常走，整轮聚合不受影响。key 不再写进代码——这两个值本是站方公开
+# 分发的免费码，改走环境变量是防以后换成自有 key 时顺手把明文带出去。
+WETEST_API_KEY = os.environ.get("WEICE_KEY", "").strip()
+HOSTMONIT_KEY = os.environ.get("HOSTMONIT_KEY", "").strip()
 CARRIER_BY_LINE = {"CM": "移动", "CU": "联通", "CT": "电信",
                    "CMCC": "移动", "CUCC": "联通", "CTCC": "电信"}
 
@@ -283,9 +288,13 @@ def api_vvhan(tag):
 
 
 def api_hostmonit(tag):
-    """CFYes 原头 HostMonit：POST 其前端公开 key（站方 JS 明文，cf2dns 等开源项目同款）。"""
+    """CFYes 原头 HostMonit：key 从环境变量 HOSTMONIT_KEY 读，没配就跳过本通道。"""
+    if not HOSTMONIT_KEY:
+        print("[info] hostmonit api skipped: HOSTMONIT_KEY not set",
+              file=sys.stderr)
+        return None
     obj = fetch_json("https://api.hostmonit.com/get_optimization_ip",
-                     {"key": "iDetkOys"})
+                     {"key": HOSTMONIT_KEY})
     info = (obj or {}).get("info") if obj else None
     if not info:
         return None
@@ -301,7 +310,13 @@ def api_hostmonit(tag):
 
 
 def api_wetest(tag):
-    """微测官方 API：带机房码（可还原地区）+ 运营商，无端口按其官方口径补 443。"""
+    """微测官方 API：带机房码（可还原地区）+ 运营商，无端口按其官方口径补 443。
+
+    key 从环境变量 WEICE_KEY 读，没配就跳过本通道（回落 txt 通道/上轮兜底）。
+    """
+    if not WETEST_API_KEY:
+        print("[info] wetest api skipped: WEICE_KEY not set", file=sys.stderr)
+        return None
     obj = fetch_json("https://www.wetest.vip/api/cf2dns/get_cloudflare_ip"
                      f"?key={WETEST_API_KEY}&type=v4")
     info = (obj or {}).get("info") if obj and obj.get("status") else None
@@ -351,6 +366,9 @@ def api_vvhan_v6(tag):
 
 def api_wetest_v6(tag):
     import ipaddress
+    if not WETEST_API_KEY:
+        print("[info] wetest6 api skipped: WEICE_KEY not set", file=sys.stderr)
+        return None
     obj = fetch_json("https://www.wetest.vip/api/cf2dns/get_cloudflare_ip"
                      f"?key={WETEST_API_KEY}&type=v6")
     info = (obj or {}).get("info") if obj and obj.get("status") else None
