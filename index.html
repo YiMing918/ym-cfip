@@ -900,7 +900,7 @@ async function testDomains(){
       gen: META ? META.generated_at : '',
       total, list: DOMRES.list.map(r => [r.dom, r.ms])}));
   }catch(e){}
-  let summary = `实测完成：可达 <b>${ok.length}</b>/${total} · 不可达 ${total - ok.length}`;
+  let summary = `${domTesting ? '实测完成' : '已停止'}：可达 <b>${ok.length}</b>/${total} · 不可达 ${total - ok.length}`;
   if(ok.length){
     const fastest = ok.reduce((a, b) => (b.ms < a.ms ? b : a));
     const avg = Math.round(ok.reduce((s, r) => s + r.ms, 0) / ok.length);
@@ -983,7 +983,7 @@ async function scanV6(){
     LS.set('cfipV6Res', JSON.stringify({
       gen: META ? META.generated_at : '', lat6}));
   }catch(e){}
-  $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 确认可达（${total ? Math.round(okN / total * 100) : 0}%；未确认≠不可用）` +
+  $('v6info').innerHTML = `${v6Scanning ? '检测完成' : '已停止'}：<b>${okN}</b>/${total} 确认可达（${total ? Math.round(okN / total * 100) : 0}%；未确认≠不可用）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
   v6Scanning = false;
