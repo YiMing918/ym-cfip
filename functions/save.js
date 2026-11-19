@@ -166,7 +166,14 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
   doc.total += 1;
   doc.ips[ip] = (doc.ips[ip] || 0) + 1;
-  await writeDoc(doc); // 先占额
+  try {
+    await writeDoc(doc); // 先占额
+  } catch (e) {
+    // 占额写失败与 release() 内的 writeDoc 同口径处理（2026-11-19 审计
+    // M10）：此前这里裸 await，KV 写失败直接抛到 Functions 层变 500；
+    // 占额没落库就等于没占，直接回 502 让访客重试即可，不留半截状态
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
   const after = await readDoc(); // 占额后全站复核
   if (after.total > 200) {
     await release();

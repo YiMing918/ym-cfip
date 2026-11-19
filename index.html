@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>YM 优选 IP · 全球优选清单自选</title>
-<meta name="description" content="Cloudflare 全球优选 IP 聚合站：66+ 地区自选、本地可用检测、延迟速度门槛、订阅链接实时更新，定时自动聚合。">
+<meta name="description" content="Cloudflare 全球优选 IP 聚合站：60+ 地区自选、本地可用检测、延迟速度门槛、订阅链接实时更新，定时自动聚合。">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
 <style>
 :root{
@@ -691,6 +691,18 @@ function renderTable(){
   document.querySelectorAll('#rows .addr').forEach(el =>
     el.addEventListener('click', () => copyText(el.dataset.line, '已复制：' + el.dataset.line)));
 }
+// 在途探测登记表（2026-11-19 审计 M5）：此前每个扫描各自建局部的
+// AbortController，「停止检测」只置 scanning=false，在途 fetch 要等
+// 各自 5 秒超时才断，域名/IPv6/清单测速等扫描更是没有停止入口。
+// 现所有扫描的 controller 都登记到这张表，停止时统一 abort 立刻断。
+const activeCtors = new Set();
+function regCtl(ctl){ activeCtors.add(ctl); return ctl; }
+function unregCtl(ctl){ activeCtors.delete(ctl); }
+function abortAllProbes(){
+  activeCtors.forEach(c => { try{ c.abort(); }catch(e){} });
+  activeCtors.clear();
+}
+let testing = false, domTesting = false, v6Scanning = false;
 function probe(addr, timeoutMs){
   // 探测口径（已修正）：fetch(no-cors) 收到任何 HTTP 响应才算「确认可达」并
   // 计耗时；连接被拒 / DNS 失败 / 超时 / TLS 证书不匹配都会 reject，记 -1
@@ -701,13 +713,13 @@ function probe(addr, timeoutMs){
     let hostport;
     if(addr.startsWith('[')) hostport = addr;
     else { const [h, p] = addr.split(':'); hostport = `${h}:${p || 443}`; }
-    const ctl = new AbortController();
+    const ctl = regCtl(new AbortController());
     const timer = setTimeout(() => ctl.abort(), timeoutMs || 5000);
     const t0 = performance.now();
     fetch(`https://${hostport}/favicon.ico?_=${Date.now()}`, {
       mode: 'no-cors', cache: 'no-store', signal: ctl.signal,
-    }).then(() => { clearTimeout(timer); res(Math.round(performance.now() - t0)); })
-      .catch(() => { clearTimeout(timer); res(-1); });
+    }).then(() => { clearTimeout(timer); unregCtl(ctl); res(Math.round(performance.now() - t0)); })
+      .catch(() => { clearTimeout(timer); unregCtl(ctl); res(-1); });
   });
 }
 async function probe2(addr, timeoutMs){
@@ -763,12 +775,13 @@ function refreshAvail(){
 }
 async function runTest(){
   const lines = RESULT.slice();
-  if(!lines.length) return;
+  if(!lines.length || testing) return;
+  testing = true;
   const btn = $('btnTest'); btn.disabled = true;
   let doneN = 0, idx = 0;
   const total = lines.length;
   async function worker(){
-    while(idx < total){
+    while(idx < total && testing){
       const p = parseLine(lines[idx++]);
       lat[p.addr] = await probe2(p.addr, 5000);
       doneN++;
@@ -779,9 +792,12 @@ async function runTest(){
     }
   }
   await Promise.all(Array.from({length: 8}, worker));
-  $('testnote').textContent = `本地测速完成（共 ${total} 条，双测取低，浏览器握手计时，仅作相对比较）` +
-    (RESULT.length > total ? `；清单共 ${RESULT.length} 条，仅测前 ${total} 条` : '') +
-    `；${regionStatText(RESULT)}`;
+  const wasTesting = testing; testing = false;
+  $('testnote').textContent = !wasTesting
+    ? `本地测速已停止（测了 ${doneN}/${total} 条）`
+    : `本地测速完成（共 ${total} 条，双测取低，浏览器握手计时，仅作相对比较）` +
+      (RESULT.length > total ? `；清单共 ${RESULT.length} 条，仅测前 ${total} 条` : '') +
+      `；${regionStatText(RESULT)}`;
   $('btnSort').disabled = false;
   btn.disabled = false;
   renderTable();
@@ -822,6 +838,8 @@ function renderDomains(){
     el.addEventListener('click', () => copyText(DOMAINS[+el.dataset.i].dom, '已复制域名：' + DOMAINS[+el.dataset.i].dom)));
 }
 async function testDomains(){
+  if(domTesting) return;
+  domTesting = true;
   const btn = $('btnDomTest'); btn.disabled = true;
   let idx = 0, doneN = 0, okN = 0;
   const total = DOMAINS.length;
@@ -830,10 +848,10 @@ async function testDomains(){
     const url = `https://${d.dom}/cdn-cgi/trace`;
     const t0 = performance.now();
     try{
-      const ctl = new AbortController();
+      const ctl = regCtl(new AbortController());
       const timer = setTimeout(() => ctl.abort(), 5000);
       const r = await fetch(url, {signal: ctl.signal, cache: 'no-store'});
-      clearTimeout(timer);
+      clearTimeout(timer); unregCtl(ctl);
       const ms = Math.round(performance.now() - t0);
       let colo = '', ip = '';
       try{
@@ -846,10 +864,10 @@ async function testDomains(){
       // 多数站点 trace 不开放跨域读取：退回 no-cors 计时（读不到机房，但延迟真实）
       const t1 = performance.now();
       try{
-        const ctl2 = new AbortController();
+        const ctl2 = regCtl(new AbortController());
         const timer2 = setTimeout(() => ctl2.abort(), 5000);
         await fetch(url, {mode: 'no-cors', signal: ctl2.signal, cache: 'no-store'});
-        clearTimeout(timer2);
+        clearTimeout(timer2); unregCtl(ctl2);
         return {ms: Math.round(performance.now() - t1), colo: '', ip: ''};
       }catch(e2){
         return {ms: -1, colo: '', ip: ''};
@@ -857,7 +875,7 @@ async function testDomains(){
     }
   }
   async function worker(){
-    while(idx < total){
+    while(idx < total && domTesting){
       const i = idx++;
       const r = await testOne(DOMAINS[i]);
       results[i] = r;
@@ -894,6 +912,7 @@ async function testDomains(){
     if(coloStr) summary += `<br>落地机房分布（能读到机房信息 trace 的）：${coloStr}`;
   }
   $('domininfo').innerHTML = summary;
+  domTesting = false;
   btn.disabled = false;
 }
 let V6RES = null;
@@ -929,12 +948,13 @@ function renderV6(){
   }).join('\n');
 }
 async function scanV6(){
-  if(!POOL6.length) return;
+  if(!POOL6.length || v6Scanning) return;
+  v6Scanning = true;
   const btn = $('btnV6Scan'); btn.disabled = true;
   let idx = 0, doneN = 0, okN = 0;
   const total = POOL6.length;
   async function worker(){
-    while(idx < total){
+    while(idx < total && v6Scanning){
       const line = POOL6[idx++];
       const key = (line.match(/^\[[^\]]+\]:\d+/) || [line])[0];
       lat6[key] = await probe(key, 5000);
@@ -966,6 +986,7 @@ async function scanV6(){
   $('v6info').innerHTML = `检测完成：<b>${okN}</b>/${total} 确认可达（${total ? Math.round(okN / total * 100) : 0}%；未确认≠不可用）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
+  v6Scanning = false;
   btn.disabled = false;
   renderV6();
 }
@@ -1096,7 +1117,13 @@ $('onlyAvail').addEventListener('change', updateSelInfo);
 $('btnGen').addEventListener('click', generate);
 $('btnScan').addEventListener('click', () => scanPool('all'));
 $('btnScanSel').addEventListener('click', () => scanPool('sel'));
-$('btnStop').addEventListener('click', () => { scanning = false; });
+$('btnStop').addEventListener('click', () => {
+  // 真停（审计 M5）：所有扫描的标志位一起落下 + 在途请求统一 abort，
+  // 不再只停全池检测、让其它扫描的在途 fetch 等超时
+  scanning = false; testing = false; domTesting = false; v6Scanning = false;
+  bigScanning = false; bigLocating = false;
+  abortAllProbes();
+});
 $('btnSelAvail').addEventListener('click', () => {
   if(!availByRegion) return;
   selected.clear();
@@ -1181,13 +1208,13 @@ async function locateBigRegions(){
   bigLocating = true;
   let idx = 0, found = 0;
   async function worker(){
-    while(idx < targets.length){
+    while(idx < targets.length && bigLocating){
       const i = targets[idx++];
       try{
-        const ctl = new AbortController();
+        const ctl = regCtl(new AbortController());
         const t = setTimeout(() => ctl.abort(), 5000);
         const r = await fetch(`https://${BIG[i].ip}:${BIG[i].port}/cdn-cgi/trace`, { signal: ctl.signal, cache: 'no-store' });
-        clearTimeout(t);
+        clearTimeout(t); unregCtl(ctl);
         const txt = await r.text();
         const loc = (txt.match(/loc=([A-Z]{2})/) || [])[1];
         if(loc){ BIGREG[i] = loc; found++; }
@@ -1237,7 +1264,7 @@ async function scanBig(){
 }
 $('btnSample').addEventListener('click', sampleBig);
 $('btnBigScan').addEventListener('click', scanBig);
-$('btnBigStop').addEventListener('click', () => { bigScanning = false; });
+$('btnBigStop').addEventListener('click', () => { bigScanning = false; bigLocating = false; abortAllProbes(); });
 $('bigN').addEventListener('change', sampleBig);
 $('bigPort').addEventListener('change', sampleBig);
 $('btnBigCopy').addEventListener('click', () =>
@@ -1488,9 +1515,9 @@ $('btnTopLink').addEventListener('click', () =>
   copyText(new URL('data/top.txt', location.href).href, '已复制今日推荐直链'));
 (async () => {
   const T = '?t=' + Date.now();
-  async function getText(path){ const r = await fetch(path + T); return r.text(); }
+  async function getText(path){ const r = await fetch(path + T); if(!r.ok) throw new Error('http ' + r.status); return r.text(); }
   try{
-    META = await (await fetch('data/meta.json' + T)).json();
+    META = await fetch('data/meta.json' + T).then(r => { if(!r.ok) throw new Error('http ' + r.status); return r.json(); });
     POOL = (await getText('data/all.txt')).split('\n').map(s => s.trim()).filter(Boolean);
   }catch(e){
     $('selinfo').textContent = '数据加载失败：请通过 http(s) 打开本站（直接双击本地文件时浏览器会拦截数据读取）。';
@@ -1613,7 +1640,7 @@ $('btnTopLink').addEventListener('click', () =>
     renderV6();
     renderV6Stats();
   }).catch(() => {});
-  fetch('data/history.json' + T).then(r => r.json()).then(h => {
+  fetch('data/history.json' + T).then(r => { if(!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(h => {
     $('history').innerHTML = h.slice(0, 6).map(x =>
       `<div>${x.at} · IPv4 ${x.total} 条 · IPv6 ${x.v6} 条 · ${x.regions} 个地区 · 域名 ${x.domains} 个</div>`).join('');
   }).catch(() => {});

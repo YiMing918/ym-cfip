@@ -98,7 +98,10 @@ async function loadPool(context, origin, file) {
   const resp = context.env && context.env.ASSETS
     ? await context.env.ASSETS.fetch(dataUrl)
     : await fetch(dataUrl);
-  if (!resp.ok) return [];
+  // 文件缺失/读取失败与「真空池」必须可区分（2026-11-19 审计 M2）：
+  // 缺失返回 null，调用方回 502 并带 # data unavailable；文件在但
+  // 内容为空返回 []，属正常空池照常 200 返回。
+  if (!resp.ok) return null;
   const txt = await resp.text();
   return txt.split("\n").map(s => s.trim()).filter(Boolean);
 }
@@ -124,11 +127,20 @@ export async function onRequest(context) {
   }
   if (!isNaN(ui) && ui > 0) headers["profile-update-interval"] = String(ui);
 
+  // n/rn 上限（2026-11-19 审计 M3）：此前只有下限，n=99999999 这类值
+  // 虽然 slice 不出事，但属于明显拼错/滥用，应与其它非法值一样 400。
+  // 上限 1000 高于任何单地区实际条数（全池约 1400、单地区最多几百），
+  // 正常订阅不受影响。
+  const N_MAX = 1000;
   const nRaw = q.get("n");
   const nAll = nRaw !== null && INT_RE.test(nRaw) ? Number(nRaw) : NaN;
-  if (nRaw !== null && (isNaN(nAll) || nAll < 1)) return badParam("n");
+  if (nRaw !== null && (isNaN(nAll) || nAll < 1 || nAll > N_MAX)) return badParam("n");
   const carrier = q.get("carrier") || "";
   const carrierSet = new Set(carrier.split(",").map(x => x.trim()).filter(Boolean));
+  // carrier 只认四网名（2026-11-19 审计 M3）：此前任意字符串都接受，
+  // 拼错一个字就静默给出一份没按运营商过滤的清单，排查困难
+  const CARRIERS = new Set(["移动", "电信", "联通", "广电"]);
+  for (const c of carrierSet) if (!CARRIERS.has(c)) return badParam("carrier");
   const mode = q.get("mode") || "";
   if (mode && mode !== "random") return badParam("mode");
   if (q.get("stack") !== null && q.get("stack") !== "6") return badParam("stack");
@@ -137,47 +149,60 @@ export async function onRequest(context) {
   const fmtRaw = q.get("fmt");
   // fmt= 空串等同未传：空模板进 applyFmt 会把每行名字替换光、只剩裸地址
   // （v1.18 及以前的静默错：参数在但为空 → 节点名全丢且不报错）
+  // 纯空白串同理（2026-11-19 审计 M3）：trim 后为空也视为未设
   const fmtClean = fmtRaw === null ? null : fmtRaw.slice(0, 300).replace(/[\r\n]/g, "");
-  const fmt = fmtClean === "" ? null : fmtClean;
+  const fmt = fmtClean === null || fmtClean.trim() === "" ? null : fmtClean;
+
+  // 以下参数校验全部前置于 stack=6 分支（2026-11-19 审计 M3）：此前
+  // stack=6 在 regions/ms/mbps/ports/rn 校验之前就直接返回，带着非法
+  // 参数的 IPv6 订阅链接会被悄悄当合法链接用。
+  const regionsRaw = q.get("regions");
+  const regionTokens = (regionsRaw !== null ? regionsRaw : (group === "sw" ? "SW" : "JP,US"))
+    .split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+  // regions 格式校验：每项必须是两位地区代码（SW 三网专区同为两字母）
+  if (!regionTokens.length || regionTokens.some(cc => !/^[A-Z]{2}$/.test(cc)))
+    return badParam("regions");
+  const regions = new Set(regionTokens);
+  const rn = {};
+  let rnBad = false;
+  (q.get("rn") || "").split(",").forEach(part => {
+    if (!part.trim()) return;
+    const [cc, v] = part.split(".");
+    const num = v && INT_RE.test(v) ? Number(v) : NaN;
+    // rn 值非法/为负：整单 400，不再静默吞掉（原实现把 NaN 存进 rn 时
+    // slice(0, NaN) 会把该地区悄悄清空，负数则悄悄给空，都难以排查）
+    // rn 的地区代码同样过格式校验、数量同样有上限（审计 M3）
+    if (!cc || !/^[A-Z]{2}$/.test(cc.trim().toUpperCase())
+        || Number.isNaN(num) || num < 0 || num > N_MAX) { rnBad = true; return; }
+    rn[cc.trim().toUpperCase()] = num;
+  });
+  if (rnBad) return badParam("rn");
+  // rn 点名的地区并入 regions：只写 rn=HK.5 时 HK 不在缺省 JP,US 里，
+  // 不并入就会在下面的池过滤被整地区跳过、一条不出还不报错
+  for (const cc of Object.keys(rn)) regions.add(cc);
+  const msRaw = q.get("ms");
+  const maxMs = msRaw !== null && NUM_RE.test(msRaw) ? Number(msRaw) : NaN;
+  if (msRaw !== null && isNaN(maxMs)) return badParam("ms");
+  const mbpsRaw = q.get("mbps");
+  const minMbps = mbpsRaw !== null && NUM_RE.test(mbpsRaw) ? Number(mbpsRaw) : NaN;
+  if (mbpsRaw !== null && isNaN(minMbps)) return badParam("mbps");
+  const ports = q.get("ports") || "all";
+  if (!["all", "443", "tls"].includes(ports)) return badParam("ports");
 
   try {
     if (q.get("stack") === "6") {
       let pool = await loadPool(context, url.origin, "/data/all6.txt");
+      if (pool === null)
+        return new Response("# data unavailable\n", { status: 502, headers });
       if (carrierSet.size) pool = pool.filter(l => { const m = l.match(/·(移动|电信|联通|广电)/); return !m || carrierSet.has(m[1]); });
       if (mode === "random") pool = shuffle(pool);
       const out = isNaN(nAll) ? pool : pool.slice(0, Math.max(0, nAll));
       return new Response(applyFmt(out, fmt).join("\n") + "\n", { headers });
     }
 
-    const regions = new Set(
-      (q.get("regions") || (group === "sw" ? "SW" : "JP,US"))
-        .split(",").map(s => s.trim().toUpperCase()).filter(Boolean)
-    );
-    const rn = {};
-    let rnBad = false;
-    (q.get("rn") || "").split(",").forEach(part => {
-      if (!part.trim()) return;
-      const [cc, v] = part.split(".");
-      const num = v && INT_RE.test(v) ? Number(v) : NaN;
-      // rn 值非法/为负：整单 400，不再静默吞掉（原实现把 NaN 存进 rn 时
-      // slice(0, NaN) 会把该地区悄悄清空，负数则悄悄给空，都难以排查）
-      if (!cc || Number.isNaN(num) || num < 0) { rnBad = true; return; }
-      rn[cc.trim().toUpperCase()] = num;
-    });
-    if (rnBad) return badParam("rn");
-    // rn 点名的地区并入 regions：只写 rn=HK.5 时 HK 不在缺省 JP,US 里，
-    // 不并入就会在下面的池过滤被整地区跳过、一条不出还不报错
-    for (const cc of Object.keys(rn)) regions.add(cc);
-    const msRaw = q.get("ms");
-    const maxMs = msRaw !== null && NUM_RE.test(msRaw) ? Number(msRaw) : NaN;
-    if (msRaw !== null && isNaN(maxMs)) return badParam("ms");
-    const mbpsRaw = q.get("mbps");
-    const minMbps = mbpsRaw !== null && NUM_RE.test(mbpsRaw) ? Number(mbpsRaw) : NaN;
-    if (mbpsRaw !== null && isNaN(minMbps)) return badParam("mbps");
-    const ports = q.get("ports") || "all";
-    if (!["all", "443", "tls"].includes(ports)) return badParam("ports");
-
     const pool = await loadPool(context, url.origin, `/data/${group}.txt`);
+    if (pool === null)
+      return new Response("# data unavailable\n", { status: 502, headers });
     const byRegion = {};
     for (const raw of pool) {
       const p = parseLine(raw);

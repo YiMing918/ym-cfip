@@ -3,7 +3,9 @@
 
 定时（GitHub Actions 每 2 小时）抓取公开优选源，去重、统一为
 「IP:端口#地区 [类型]」格式，生成 data/*.txt + data/meta.json。
-只做聚合与格式整理，不做测速——测速口径见各源标注。
+只做聚合与格式整理：IP 条目只做格式/合法段校验 + 去重，不做连通
+探测、不测速、不测活；域名池另做 DNS 解析筛选（能解析才留）。
+延迟/速度口径见各源标注，是否可用以访客本地检测为准。
 """
 import ipaddress
 import json
@@ -13,7 +15,8 @@ import socket
 import sys
 import time
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -190,6 +193,17 @@ def _read_limited(resp, deadline):
     return b"".join(chunks)
 
 
+def _mask_url(url):
+    """日志打码：URL 里的 key/api_key/token 参数值一律抹掉再打印。
+
+    微测原头 API 的 key 走 ?key=… 查询串（见 api_wetest），fetch_json
+    失败时旧版直接 print 完整 url，key 就这么进了 Actions 日志。
+    key 本身的处置（硬编码改环境变量）另案待定，这里先堵日志泄露。
+    """
+    return re.sub(r"([?&](?:key|api_key|token)=)[^&#]+", r"\1***",
+                  str(url), flags=re.I)
+
+
 def fetch(urls):
     if isinstance(urls, str):
         urls = [urls]
@@ -197,14 +211,14 @@ def fetch(urls):
     for url in urls:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            print(f"[warn] fetch skipped {url}: source time budget exhausted", file=sys.stderr)
+            print(f"[warn] fetch skipped {_mask_url(url)}: source time budget exhausted", file=sys.stderr)
             break
         try:
             req = urllib.request.Request(url, headers=UA)
             with urllib.request.urlopen(req, timeout=min(25, remaining)) as resp:
                 return _read_limited(resp, deadline).decode("utf-8", "replace"), url
         except Exception as exc:  # noqa: BLE001
-            print(f"[warn] fetch failed {url}: {exc}", file=sys.stderr)
+            print(f"[warn] fetch failed {_mask_url(url)}: {exc}", file=sys.stderr)
     return None, urls[0]
 
 
@@ -237,7 +251,7 @@ def fetch_json(url, payload=None):
         with urllib.request.urlopen(req, timeout=25) as resp:
             return json.loads(_read_limited(resp, deadline).decode("utf-8", "replace"))
     except Exception as exc:  # noqa: BLE001
-        print(f"[warn] api failed {url}: {exc}", file=sys.stderr)
+        print(f"[warn] api failed {_mask_url(url)}: {exc}", file=sys.stderr)
     return None
 
 
@@ -752,6 +766,9 @@ def _loose_fallback(base, tag):
     return (lines, sw) if (lines or sw) else None
 
 
+POOL_FLOOR = 5  # 总池绝对地板：本轮总数低于此数永不发布（见 main 守卫）
+
+
 def _pool_drops(base, total, v6_total, domains_total):
     """返回跌幅超 20% 的池子 [(名称, 上轮, 本轮)]；上轮为 0 时不判定。"""
     drops = []
@@ -877,6 +894,36 @@ def resolves(dom):
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+# 域名 DNS 筛选的整轮截止（秒）：getaddrinfo 本身没有超时参数，单个域名
+# 的解析挂死时，旧版 24 线程池 ex.map 等全部结果，能把一轮聚合拖到
+# 工作流被平台杀掉为止。现给整批解析设总截止：到点未出结果的一律按
+# 解析失败（筛除）处理，本轮照常往下走。
+DNS_DEADLINE_SEC = 30
+
+
+def _resolve_all(doms):
+    """批量解析并返回与 doms 同序的布尔列表，整体不超过 DNS_DEADLINE_SEC。"""
+    doms = list(doms)
+    out = [False] * len(doms)
+    if not doms:
+        return out
+    ex = ThreadPoolExecutor(max_workers=24)
+    try:
+        fut2idx = {ex.submit(resolves, d): i for i, d in enumerate(doms)}
+        try:
+            for fut in as_completed(fut2idx, timeout=DNS_DEADLINE_SEC):
+                out[fut2idx[fut]] = bool(fut.result())
+        except FuturesTimeoutError:
+            pending = sum(1 for f in fut2idx if not f.done())
+            print(f"[warn] dns screening deadline {DNS_DEADLINE_SEC}s hit: "
+                  f"{pending} domains treated as unresolvable",
+                  file=sys.stderr)
+    finally:
+        # 不等挂死的解析线程：超时域名已按失败处理，线程留后台自行结束
+        ex.shutdown(wait=False, cancel_futures=True)
+    return out
 
 
 def parse_v6(text, tag):
@@ -1179,7 +1226,7 @@ def main():
                 print(f"[warn] domain parse failed {src['name']}: {exc}", file=sys.stderr)
                 pairs = []
         if not pairs:
-            # 本轮抓取失败/为空：沿用上轮该源域名（上轮已通过解析筛选，免重复验活）
+            # 本轮抓取失败/为空：沿用上轮该源域名（上轮已通过 DNS 解析筛选，免重复解析）
             fb = baseline["domains_by_short"].get(src["short"], []) \
                 if fb_allowed(src["name"]) else []
             if fb:
@@ -1205,8 +1252,7 @@ def main():
                              "lines_in": len(text.splitlines()),
                              "lines_used": len(pairs),
                              "note": "优选域名源，与其他域名源合并去重"})
-    with ThreadPoolExecutor(max_workers=24) as ex:
-        alive = list(ex.map(resolves, list(dom_map.keys())))
+    alive = _resolve_all(list(dom_map.keys()))
     domains, screened = [], 0
     for (dom, lab), ok_ in zip(dom_map.items(), alive):
         if ok_:
@@ -1222,13 +1268,45 @@ def main():
     # 但保护不能永久冻结：跌幅连续两轮成立，说明上游缩水已成常态（基线就是
     # 上轮产物，旧逻辑下新数据永远过不了线、站点数据被永久冻在旧值），第二
     # 轮起接受发布并在 meta 里显式标注，仍发告警请人工复核上游。
-    drops = _pool_drops(baseline, len(groups["all"]), len(v6_all), len(domains))
+    # 绝对地板（2026-11-19 审计修复）：总池为 0 或极低量（< POOL_FLOOR）
+    # 永不放行——相对跌幅 + streak 的「连续两轮接受新常态」是防永久冻结
+    # 的有意设计，但上游整体故障时第 2 轮把空池/近空池当新常态发布、
+    # 站点清单被清空的后果不可接受。故地板检查排在跌幅保护之前且不受
+    # streak 影响：继续冻结旧池、写清日志，并以非零退出让工作流标红
+    # 告警（旧跌幅冻结是只告警不报错，地板触发必须让人看见）。
+    total_all = len(groups["all"])
+    if total_all < POOL_FLOOR:
+        _floor_detail = (f"总池本轮仅 {total_all} 条，低于绝对地板 "
+                         f"{POOL_FLOOR} 条")
+        print(f"::error::聚合绝对地板触发：{_floor_detail}，"
+              "已保留上轮产物、本轮不覆盖发布")
+        print(f"[error] pool floor guard: {_floor_detail}", file=sys.stderr)
+        _summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if _summary:
+            try:
+                with open(_summary, "a", encoding="utf-8") as fh:
+                    fh.write("## 🛑 聚合绝对地板触发\n\n"
+                             f"{_floor_detail}。已保留上一轮产物、本轮不"
+                             "覆盖发布；请排查上游源站（疑似整体故障）。\n")
+            except Exception:  # noqa: BLE001 — 摘要写失败不影响主流程
+                pass
+        # 冻结轮同样保存本轮兜底计数 round_fb（与 L5 修复同口径，见下）
+        _save_agg_state(int(agg_state.get("guard_streak") or 0), round_fb)
+        print(json.dumps({"guard": "pool-floor", "kept_previous": True,
+                          "total": total_all}, ensure_ascii=False))
+        sys.exit(1)
+
+    drops = _pool_drops(baseline, total_all, len(v6_all), len(domains))
     guard_streak = 0
     if drops:
         guard_streak = int(agg_state.get("guard_streak") or 0) + 1
         if guard_streak < 2:
             alert_pool_drop(drops)
-            _save_agg_state(guard_streak, fb_prev)
+            # L5 修复：冻结分支旧版存的是上一轮的 fb_prev，本轮实际用掉
+            # 的兜底次数（round_fb）被丢掉，同一批源的 FALLBACK_MAX=6
+            # 计数在冻结轮不推进、可被反复续命。与发布分支统一存
+            # round_fb，状态机口径一致。
+            _save_agg_state(guard_streak, round_fb)
             print(json.dumps({"guard": "pool-drop", "kept_previous": True},
                              ensure_ascii=False))
             return
