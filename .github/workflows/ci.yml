@@ -1,0 +1,27 @@
+name: ci
+
+# 推送与 PR 时跑仓库自带的本地替身测试（无网络依赖），
+# 避免改坏 functions 逻辑随聚合部署上线。只在代码文件变化时触发，
+# 机器人每 2 小时的数据提交不惊动它。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'index.html'
+      - 'tests/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: run tests
+        run: |
+          node tests/audit-fixes.mjs
+          node tests/sub-params.mjs
