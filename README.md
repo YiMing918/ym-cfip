@@ -2,7 +2,7 @@
 
 多源聚合的 Cloudflare 优选 IP 站：**全球 1000+ 条、60+ 个地区、优选域名 800+ 个**，地区/运营商/数量/延迟/速度全都能自己选，浏览器本地实测可用性，一键生成可**自动更新的订阅链接**。纯静态 + Pages Functions，免费额度内运行，GitHub Actions 定时聚合数据。
 
-![version](https://img.shields.io/badge/version-v1.22-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+![version](https://img.shields.io/badge/version-v1.23-orange) ![platform](https://img.shields.io/badge/Cloudflare-Pages-blue) ![update](https://img.shields.io/badge/数据-自动聚合-green) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 **[下载最新版](https://github.com/YiMing918/ym-cfip/releases/latest) · [博客教程](https://bk.ymaym.top/post/ym-cfip-guide)**
 
@@ -550,10 +550,10 @@
 
 ## 订阅端点 /sub
 
-把选项写进链接，客户端拉取时现算。示例：
+把选项写进链接，客户端拉取时现算。页面生成的链接是 `/sub.txt` 形式（v1.23 起）：参数和内容与 `/sub` 完全一样，只是链接以 `.txt` 结尾，和站内其它直链同形，方便只认 TXT 链接的订阅后台（如 CFNext）拉取；`/sub` 旧链接照常能用。示例：
 
 ```
-/sub?regions=JP,US&n=20&ms=200&ui=12
+/sub.txt?regions=JP,US&n=20&ms=200&ui=12
 ```
 
 | 参数 | 说明 |
@@ -793,6 +793,8 @@ docs/                       README 里用到的截图
 ```
 
 ## 版本历史
+
+- **v1.23（2026-11-20）**：订阅链接改成 TXT 形式，兼容各订阅后台。页面生成的订阅链接从 `/sub?...` 改为 `/sub.txt?...`——参数（regions / n / fmt / ui 等）和返回的清单内容一字不变，只是链接以 `.txt` 结尾，和站内其它直链、别家优选源的 TXT 链接同形。**为什么改**：`/sub` 是接口现算，以前每次拉取都要现拉整池再算，单次要等 3～4 秒；有的订阅后台拉源只等 6 秒（如 CFNext 的优选节点），网络稍慢就超时、整条源作废，表现就是「链接填进去拉不出来」——别家的 TXT 直链是静态文件、毫秒级返回，所以只有本站这条拉不动。**配套提速**：订阅接口的取池加了 120 秒缓存（聚合数据约每 2 小时才更新一轮），重复拉取毫秒级返回，新链接和旧链接都受益。**旧链接怎么办**：`/sub` 保留不动、照常能用，已经填进客户端的旧链接不用换；新生成的一律是 `/sub.txt`。本地实测：仓库两套测试（tests/）全过，`/sub` 与 `/sub.txt` 同参数输出逐行一致。
 
 - **v1.22（2026-11-19）**：原头 API 的 key 改走环境变量（v1.21 第⑥条留的尾巴收口）。微测、HostMonit 两家原头互备通道的 key 以前明文写在聚合脚本里（本是站方公开分发的免费码），现改为从环境变量读——微测读 `WEICE_KEY`、HostMonit 读 `HOSTMONIT_KEY`，代码与注释里不再留明文，日志打码照旧。**没配这两个变量会怎么样**：对应原头通道自动跳过（日志里各有一行不带 key 的提示），转载通道与上轮兜底照常用、聚合照常出数据；只有「微测 IPv6」这种只有原头一条路的源会先沿用上轮数据。**想配（可选，不配也能用）**：① 在仓库 Settings → Secrets and variables → Actions 里新建两个 Secrets，名字就叫 `WEICE_KEY` 和 `HOSTMONIT_KEY`，值用站方公开的免费码（微测官网文档页、HostMonit 网站前端里都能找到，就是以前写在代码里的那两个）；② 再给 `.github/workflows/update.yml` 的「抓取并聚合」步骤加上两行 env：`WEICE_KEY: ${{ secrets.WEICE_KEY }}` 与 `HOSTMONIT_KEY: ${{ secrets.HOSTMONIT_KEY }}`，下一轮自动生效。本地实测：不设变量整轮跑完（总池 1349 条，微测 IPv6 沿用上轮数据）、设假 key 三个原头通道都能走到调用并正常回落，日志里无 key 明文。
 
