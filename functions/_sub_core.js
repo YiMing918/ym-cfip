@@ -2,7 +2,7 @@
 // /sub 与 /sub.txt 两个入口共用本文件：参数、输出完全一致，
 // /sub.txt 是带问号参数的直算形式，/sub 保留兼容旧链接；
 // v1.24 起页面生成的正式形式是预设短链 /s/<短码>.txt（参数存 KV、
-// 由 functions/s/[id].txt.js 读出后转调本文件的 handleSub 现算），
+// 由 functions/_preset.js 读出后转调本文件的 handleSub 现算），
 // 三个入口同一套参数、同一份输出。
 // 参数：
 //   regions=JP,US      地区（缺省 JP,US）
@@ -20,12 +20,17 @@
 // 每次请求基于最新聚合数据现算，链接内容实时更新。
 const LINE_RE = /^(\S+?)#([A-Z]{2})\d*\s*(?:\[(.*)\])?$/;
 
-// 导出时重编序号：#JP 后、方括号前加同地区序号（子集筛选后从 1 连续编）
+// 导出时重编序号（子集筛选后从 1 连续编），并把名字换成
+// 「地区中文名 代码 序号」打头（v1.25）：名字这样排，CFNext 这类
+// 后台能把地区提炼成「地区-序号」，与天诚等源在它里面的样子一致
+// （提炼规则见下方 {来源} 处的说明）；别的后台原样显示也一眼能
+// 分清地区。方括号里的源标注原样保留在名字尾巴上。
 function renumber(lines) {
   const cnt = {};
   return lines.map(l => l.replace(/^(\S+?)#(IPv6|[A-Z]{2})\d*/, (m, a, cc) => {
     cnt[cc] = (cnt[cc] || 0) + 1;
-    return `${a}#${cc}${cnt[cc]}`;
+    if (cc === "IPv6") return `${a}#IPv6 ${cnt[cc]}`;
+    return `${a}#${NAMES[cc] || cc} ${cc} ${cnt[cc]}`;
   }));
 }
 
@@ -48,26 +53,16 @@ function srcName(tag) {
   return (tag || "").replace(/[\d.]+\s*ms/i, "").replace(/[\d.]+\s*Mbps/i, "")
     .replace(/·(移动|电信|联通|广电)/, "").replace(/\s+/g, " ").trim();
 }
-// 来源英文标签（v1.24）：{来源} 若是中文源名，部分订阅后台（CFNext 的
-// 名单解析器）只要节点名里含中文就把整个名字清空、下发时回退成
-// 「优选IP-编号」，一排节点分不清谁是谁（其判定原文：名字含
-// [\u4e00-\u9fa5] 或竖线 | 就不走原样保留分支）。代入前统一换成
-// ASCII 标签：已知来源查下表；未知来源去掉非 ASCII 字符与竖线兜底；
-// 再为空（纯中文未收录 / 本就无来源标注）用 Src+同地区序号占位。
-// 保证 {来源} 永远产出非空、无中文、无竖线的名字，哪个后台都原样保留。
-const SRC_LABELS = {
-  "优选高速": "Gaosu", "微测优选": "Wetest", "微测": "Wetest",
-  "反代入口": "Fandai", "官方CF": "OfficialCF", "天诚优选": "Tiancheng",
-  "S5公益": "S5Gongyi", "辣椒优选": "Lajiao", "辣子鸡": "Laziji",
-  "CM优选": "CM", "麒麟优选": "Qilin", "洛璃优选": "Luoli", "Mia优选": "Mia",
-};
-function srcLabel(tag, seq) {
-  const raw = srcName(tag);
-  if (SRC_LABELS[raw]) return SRC_LABELS[raw];
-  const ascii = raw.replace(/[^\x20-\x7E]/g, "").replace(/\|/g, "")
-    .replace(/\s+/g, " ").trim();
-  return ascii || `Src${seq}`;
-}
+// 来源名用中文原名（v1.25 改回）：v1.24 曾把 {来源} 换成英文标签，
+// 起因是 CFNext 解析名单时，名字含中文就走「提炼地区」分支、提炼
+// 不出就整名清空、下发回退「优选IP-编号」。后来逐行读了它的解析
+// 代码并实测确认：它提炼的只是名字开头——开头排成「地区中文名
+// 空格 两位代码」时必定提炼成功、下发成「地区-序号」，和天诚优选
+// 等源在它里面的名字完全同形；名字后半段是什么语言它不管。所以
+// 正解是把名字开头排成那个形状（无 fmt 时 renumber 这么排、页面
+// 默认命名格式也这么排），{来源} 用回中文原名，哪个后台都分得清。
+// 未知来源、ASCII 来源都原样；无来源标注就空着（多余空格会被
+// applyFmt 压掉）。
 // fmt 模板（页面「导出格式」经订阅参数传入）：变量 {地区}{代码}{序号}{延迟}{网速}{运营商}{来源}{端口}{日期}{标签}{旗帜}
 function applyFmt(lines, fmt) {
   if (fmt === null) return renumber(lines);
@@ -83,7 +78,7 @@ function applyFmt(lines, fmt) {
       .replaceAll("{延迟}", p.srcMs !== null ? `${p.srcMs}ms` : "")
       .replaceAll("{网速}", p.srcMbps ? `${p.srcMbps}Mbps` : "")
       .replaceAll("{运营商}", p.carrier || "")
-      .replaceAll("{来源}", srcLabel(p.tag, cnt[p.region]))
+      .replaceAll("{来源}", srcName(p.tag))
       .replaceAll("{端口}", p.port || "")
       .replaceAll("{日期}", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10))
       .replaceAll("{标签}", p.tag || "")
