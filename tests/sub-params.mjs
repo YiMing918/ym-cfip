@@ -65,5 +65,82 @@ const regionCount = (out, cc) => out.filter(l => l.includes('#' + cc)).length;
   chk('fmt 真实模板仍生效', tpl.out.length === 3 && tpl.out.every(l => /#JP-\d$/.test(l)), JSON.stringify(tpl.out));
 }
 
+// ⑤ {来源} 英文标签（v1.24）：已知中文源换英文标签、未知源 ASCII 兜底、
+//    已是 ASCII 的原样、无来源标注用 Src+序号占位；任何名字不得含中文
+//    （[\u4e00-\u9fa5]）或竖线——这是 CFNext 名单解析器的清名判定原文，
+//    含其一就整名清空、下发回退成「优选IP-编号」。
+const PETER_FMT = '{代码}{序号} []{旗帜}{来源}';
+const CJK_RE = /[\u4e00-\u9fa5]/;
+const nameOf = l => l.slice(l.indexOf('#') + 1);
+{
+  const r = await lines('regions=HK,JP,US&fmt=' + encodeURIComponent(PETER_FMT));
+  chk('英文标签：200', r.status === 200, `status=${r.status}`);
+  chk('英文标签：优选高速 → Gaosu', r.out.length > 0 && r.out.every(l => nameOf(l).endsWith('Gaosu')), JSON.stringify(r.out.slice(0, 2)));
+  chk('英文标签：名字无中文、无竖线', r.out.every(l => !CJK_RE.test(nameOf(l)) && !nameOf(l).includes('|')));
+  chk('英文标签：名字带地区码', r.out.every(l => /^[A-Z]{2}\d/.test(nameOf(l))), JSON.stringify(r.out.slice(0, 2)));
+}
+const POOL2 = [
+  '45.194.17.9:443#HK1 [没见过的源 50ms 20Mbps]',
+  '45.194.17.10:443#HK2 [微测优选·移动 51ms 19Mbps]',
+  '45.194.17.11:443#HK3 [yuanxiawan 52ms 18Mbps]',
+  '45.194.17.12:443#HK4 [95.12ms 7.95Mbps]',
+].join('\n') + '\n';
+const subCtx2 = (qs) => ({
+  env: { ASSETS: { fetch: async (u) => new Response(new URL(u).pathname === '/data/best.txt' ? POOL2 : POOL, { status: 200 }) } },
+  request: new Request('http://local/sub.txt' + (qs ? '?' + qs : '')),
+});
+{
+  const r = await subRequest(subCtx2('group=best&regions=HK&fmt=' + encodeURIComponent(PETER_FMT)));
+  const out = (await r.text()).split('\n').filter(Boolean);
+  const names = out.map(nameOf);
+  chk('英文标签·兜底：200 且 4 条', r.status === 200 && out.length === 4, `status=${r.status} n=${out.length}`);
+  chk('英文标签·兜底：微测优选 → Wetest', names.some(n => n.endsWith('Wetest')), JSON.stringify(names));
+  chk('英文标签·兜底：ASCII 源原样', names.some(n => n.endsWith('yuanxiawan')), JSON.stringify(names));
+  chk('英文标签·兜底：未知中文源与无标注源 → Src+序号（2 个）', names.filter(n => /Src\d+$/.test(n)).length === 2, JSON.stringify(names));
+  chk('英文标签·兜底：名字无中文、无竖线', names.every(n => !CJK_RE.test(n) && !n.includes('|')));
+}
+
+// ⑥ 参数预设短链（v1.24）：同参数同码（幂等、键序无关）、非法参数 400、
+//    短链读出与 /sub.txt 同参数逐行一致、未知短码 404、非法短码 400
+const { onRequestPost: savePost } = await import('../functions/save.js');
+const { onRequestGet: shortGet } = await import('../functions/s/[id].txt.js');
+class FakeKV {
+  constructor() { this.m = new Map(); }
+  async get(k) { return this.m.has(k) ? this.m.get(k) : null; }
+  async put(k, v) { this.m.set(k, String(v)); }
+}
+const presetPost = (kv, params) => savePost({
+  env: { SNAP: kv },
+  request: new Request('http://local/save', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'preset', params }),
+  }),
+});
+{
+  const kv = new FakeKV();
+  const r1 = await presetPost(kv, { regions: 'HK,JP,KR,SG,US', fmt: PETER_FMT, ui: '12' });
+  const j1 = await r1.json();
+  chk('预设：创建 200 且短码为 10 位十六进制', r1.status === 200 && /^[a-f0-9]{10}$/.test(j1.code || ''), `status=${r1.status} body=${JSON.stringify(j1)}`);
+  chk('预设：url 是 /s/<短码>.txt 形式', !!j1.url && j1.url.endsWith('/s/' + j1.code + '.txt'), j1.url || '');
+  const r2 = await presetPost(kv, { ui: '12', fmt: PETER_FMT, regions: 'HK,JP,KR,SG,US' });
+  const j2 = await r2.json();
+  chk('预设：同参数同码（幂等、键序无关）', r2.status === 200 && j2.code === j1.code, JSON.stringify(j2));
+  chk('预设：重复生成不重复写 KV', [...kv.m.keys()].filter(k => k.startsWith('preset:')).length === 1);
+  const bad = await presetPost(kv, { n: 'abc' });
+  chk('预设：非法参数 n=abc → 400', bad.status === 400, `status=${bad.status}`);
+  const badKey = await presetPost(kv, { evil: '1' });
+  chk('预设：未知参数名 → 400', badKey.status === 400, `status=${badKey.status}`);
+  const shortEnv = { SNAP: kv, ASSETS: { fetch: async () => new Response(POOL, { status: 200 }) } };
+  const rs = await shortGet({ params: { id: j1.code }, env: shortEnv, request: new Request('http://local/s/' + j1.code + '.txt') });
+  const shortText = await rs.text();
+  const direct = await lines('regions=HK,JP,KR,SG,US&fmt=' + encodeURIComponent(PETER_FMT) + '&ui=12');
+  chk('预设短链：200', rs.status === 200, `status=${rs.status}`);
+  chk('预设短链：与 /sub.txt 同参数逐行一致', shortText === direct.out.join('\n') + '\n', shortText.slice(0, 120));
+  const r404 = await shortGet({ params: { id: 'deadbeef00' }, env: shortEnv, request: new Request('http://local/s/deadbeef00.txt') });
+  chk('预设短链：未知短码 → 404', r404.status === 404, `status=${r404.status}`);
+  const rBad = await shortGet({ params: { id: 'XYZ' }, env: shortEnv, request: new Request('http://local/s/XYZ.txt') });
+  chk('预设短链：非法短码 → 400', rBad.status === 400, `status=${rBad.status}`);
+}
+
 console.log(`\nTOTAL pass=${pass} fail=${failN}`);
 process.exit(failN ? 1 : 0);

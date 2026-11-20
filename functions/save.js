@@ -1,4 +1,7 @@
 // POST /save {text} → {id, url}：把访客当前清单存为快照订阅（KV: SNAP）
+// POST /save {mode:"preset", params} → {code, url}：把一组订阅参数存为
+// 预设（v1.24），页面据此展示短链 /s/<短码>.txt，见文件后半 handlePreset。
+import { handleSub } from "./_sub_core.js";
 // 快照是定格版（可含本地测通筛选），不随聚合变化；保留 180 天；链接即凭证（内容本就是公开 IP 清单）。
 // id 由内容 SHA-256 派生（同内容同 id）：重复保存直接返回已有链接、零写入，
 // 既省 KV 写额度，也让「同一份清单永远同一个链接」。
@@ -120,6 +123,7 @@ export async function onRequestPost(context) {
   if (!context.env || !context.env.SNAP)
     return new Response(JSON.stringify({ error: "snapshot storage not configured（快照存储未配置：本站未绑定 SNAP KV）" }), { status: 501, headers });
   const body = await context.request.json().catch(() => null);
+  if (body && body.mode === "preset") return handlePreset(context, body, headers);
   const text = body && typeof body.text === "string" ? body.text : "";
   const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
   if (!lines.length || lines.length > 5000 || text.length > 300000)
@@ -186,4 +190,98 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
   }
   return new Response(JSON.stringify({ id, url: new URL("/s/" + id, context.request.url).href }), { headers });
+}
+
+// ── 参数预设（v1.24）：{mode:"preset", params:{...}} → {code, url} ──
+// 页面把当前订阅选项（regions/fmt/ui 等）存成预设，展示的订阅链接就变成
+// /s/<短码>.txt：.txt 结尾、无问号参数尾巴，和别家优选源的 TXT 直链同形，
+// 填进哪个订阅后台都一样。短码 = 参数集规范化 JSON 的 SHA-256 前 10 位
+// （十六进制）：同一套选择永远同一个码，重复生成直接返回已有短码、零写入、
+// 不计限额（与快照的 contentId 同思路）。预设只存参数不存数据，永不过期：
+// 内容由 /s/[id].txt.js 在拉取时按最新聚合数据现算，池子更新自动跟上。
+// 参数校验不另写一份：拿参数真跑一遍 handleSub，但喂一个必然 404 的取池
+// 桩——参数不合法时 handleSub 在取池之前就回 400（校验全在取池前完成），
+// 所以探针只认 400 为非法；合法参数走到取池这步：冷缓存时桩回 404 使它
+// 回 502，热缓存时直接命中缓存回 200，两种都算合法。取池对失败结果不
+// 写缓存，这个探针不会污染真实取池。两边口径永远一致，不会漂移。
+const PRESET_KEYS = new Set(["regions", "rn", "n", "ms", "mbps", "carrier", "ports", "mode", "stack", "group", "fmt", "ui"]);
+function presetCanon(params) {
+  return JSON.stringify(Object.fromEntries(
+    Object.keys(params).sort().map(k => [k, params[k]])));
+}
+async function presetCode(params) {
+  const buf = await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(presetCanon(params)));
+  return [...new Uint8Array(buf)]
+    .map(x => x.toString(16).padStart(2, "0")).join("").slice(0, 10);
+}
+async function handlePreset(context, body, headers) {
+  const raw = body.params;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    return new Response(JSON.stringify({ error: "invalid params（参数缺失或格式不对）" }), { status: 400, headers });
+  const params = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!PRESET_KEYS.has(k) || typeof v !== "string" || v.length > 300)
+      return new Response(JSON.stringify({ error: "invalid params（参数名或参数值不合法）" }), { status: 400, headers });
+    const val = v.trim();
+    if (val) params[k] = val; // 空串等同未传，与订阅端点同口径
+  }
+  // fmt 与订阅端点同口径：截断 300、去换行，纯空白等同未设
+  if (params.fmt !== undefined) {
+    const f = params.fmt.slice(0, 300).replace(/[\r\n]/g, "");
+    if (f.trim() === "") delete params.fmt; else params.fmt = f;
+  }
+  const qs = new URLSearchParams(params).toString();
+  const probe = await handleSub({
+    request: new Request("http://local/sub.txt" + (qs ? "?" + qs : "")),
+    env: { ASSETS: { fetch: async () => new Response("", { status: 404 }) } },
+  });
+  if (probe.status === 400) {
+    const msg = (await probe.text()).trim().replace(/^#\s*/, "");
+    return new Response(JSON.stringify({ error: msg + "（预设参数不合法）" }), { status: 400, headers });
+  }
+  const code = await presetCode(params);
+  const url = new URL("/s/" + code + ".txt", context.request.url).href;
+  // 同一套参数已存过：直接返回已有短码，不写 KV、不计限额
+  if (await context.env.SNAP.get("preset:" + code))
+    return new Response(JSON.stringify({ code, url }), { headers });
+  // 新预设才写 KV：限额口径与快照一致（防匿名刷爆每日写额度），独立计数
+  // 文档 rl:preset:<北京时间日期>，全站每日最多 200 个新预设、单 IP 100 个；
+  // 同样先占额再写对象、失败退还（理由见上方快照段注释）。
+  const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
+  const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const rlKey = "rl:preset:" + day;
+  const readDoc = async () => {
+    try { return JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || { total: 0, ips: {} }; }
+    catch (e) { return { total: 0, ips: {} }; }
+  };
+  const writeDoc = d => context.env.SNAP.put(rlKey, JSON.stringify(d), { expirationTtl: 2 * 24 * 3600 });
+  const release = async () => {
+    const d = await readDoc();
+    d.total = Math.max(0, d.total - 1);
+    d.ips[ip] = Math.max(0, (d.ips[ip] || 0) - 1);
+    await writeDoc(d).catch(() => {});
+  };
+  let doc = await readDoc();
+  if ((doc.ips[ip] || 0) >= 100 || doc.total >= 200)
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
+  doc.total += 1;
+  doc.ips[ip] = (doc.ips[ip] || 0) + 1;
+  try {
+    await writeDoc(doc); // 先占额
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
+  const after = await readDoc(); // 占额后全站复核
+  if (after.total > 200) {
+    await release();
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日保存次数已达上限，明天再来）" }), { status: 429, headers });
+  }
+  try {
+    await context.env.SNAP.put("preset:" + code, presetCanon(params)); // 永不过期
+  } catch (e) {
+    await release();
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
+  return new Response(JSON.stringify({ code, url }), { headers });
 }

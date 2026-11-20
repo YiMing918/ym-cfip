@@ -252,7 +252,7 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card">
   <h3>③ 我的订阅链接（自动更新）</h3>
-  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。<b>两种模式怎么选</b>：不测速、想让客户端定时更新就自动换上最新节点的 → 用这条实时链接；自己测速、只想要测通的那批且不许它自己变的 → 用下面的快照链接。</div>
+  <div class="note">把这条链接填进客户端 / 优选订阅，客户端每次拉取拿到的都是<b>最新聚合数据</b>按你当前选项（地区、数量、门槛、运营商、端口、取数）现算的清单；上面选项一改，链接自动跟着变。链接是<b>短链形式</b>（以 .txt 结尾、不带问号参数：你的选项已存成预设放在服务端，同一套选项永远同一条短链），和别家优选源的 TXT 直链同形，填进哪个订阅后台都一样。「本地可用」是浏览器本地测的、上面的实时链接带不了 — 要把本地测通的结果变成订阅，用下面的<b>快照链接</b>；你的整套选项也可以存成<b>分享链接</b>收藏或发给别人。<b>两种模式怎么选</b>：不测速、想让客户端定时更新就自动换上最新节点的 → 用这条实时链接；自己测速、只想要测通的那批且不许它自己变的 → 用下面的快照链接。</div>
   <div class="ctrl">
     <input id="subUrl" readonly>
     <button class="btn primary" id="btnSubCopy">复制订阅链接</button>
@@ -1011,7 +1011,35 @@ function buildSubUrl(stack6){
   if($('subUi').value) parts.push('ui=' + $('subUi').value);
   return base + '?' + parts.join('&');
 }
-function refreshSub(){ const el = $('subUrl'); if(el) el.value = buildSubUrl(false); }
+// v1.24：订阅链接改走「参数预设」短链——把当前选项存到服务端换一个短码，
+// 页面展示的是 https://本站/s/<短码>.txt：.txt 结尾、无问号参数尾巴，和别家
+// 优选源的 TXT 直链同形，填进哪个订阅后台都一样。同一套选项永远同一个短码；
+// 短链拉取时按预设参数现算，内容与问号版 /sub.txt 同参数逐行一致。
+// 预设接口不可用时退回问号版链接（旧形式照常能用），页面不会因此坏掉。
+const presetUrlCache = new Map();
+async function presetShortUrl(stack6){
+  const params = Object.fromEntries(new URL(buildSubUrl(stack6)).searchParams);
+  const cacheKey = new URLSearchParams(Object.entries(params).sort()).toString();
+  if(presetUrlCache.has(cacheKey)) return presetUrlCache.get(cacheKey);
+  const r = await fetch(new URL('save', location.href).href, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'preset', params }),
+  });
+  const j = await r.json().catch(() => null);
+  if(!r.ok || !j || !j.url) throw (j && j.error) || 0;
+  presetUrlCache.set(cacheKey, j.url);
+  return j.url;
+}
+let subRefreshSeq = 0;
+async function refreshSub(){
+  const el = $('subUrl'); if(!el) return;
+  const seq = ++subRefreshSeq;
+  el.value = buildSubUrl(false); // 先放问号版兜底，短链回来立刻换上
+  try{
+    const short = await presetShortUrl(false);
+    if(seq === subRefreshSeq) el.value = short;
+  }catch(e){ /* 预设失败就停在问号版，照常可用 */ }
+}
 function snapScopeLines(){
   const scope = $('snapScope').value;
   if(scope === 'all') return RESULT.slice();
@@ -1502,7 +1530,11 @@ window.addEventListener('hashchange', () => {
   __lastHash = location.hash;
   if(location.hash.startsWith('#c=')) location.reload();
 });
-$('btnV6Sub').addEventListener('click', () => copyText(buildSubUrl(true), '已复制 IPv6 订阅链接'));
+$('btnV6Sub').addEventListener('click', async () => {
+  let u;
+  try{ u = await presetShortUrl(true); }catch(e){ u = buildSubUrl(true); }
+  copyText(u, '已复制 IPv6 订阅链接');
+});
 $('btnTopCopy').addEventListener('click', () =>
   copyText(formatLines(TOPLINES).join('\n'), `已复制今日推荐 ${TOPLINES.length} 条`));
 $('btnTopDl').addEventListener('click', () => {

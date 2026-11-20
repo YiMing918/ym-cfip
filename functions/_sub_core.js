@@ -1,7 +1,9 @@
 // YM 优选 IP · 订阅端点公共逻辑（Cloudflare Pages Functions）
 // /sub 与 /sub.txt 两个入口共用本文件：参数、输出完全一致，
-// /sub.txt 是页面生成的正式形式（.txt 结尾，与站内其它直链同形，
-// 方便只认 .txt 链接的订阅后台拉取），/sub 保留兼容旧链接。
+// /sub.txt 是带问号参数的直算形式，/sub 保留兼容旧链接；
+// v1.24 起页面生成的正式形式是预设短链 /s/<短码>.txt（参数存 KV、
+// 由 functions/s/[id].txt.js 读出后转调本文件的 handleSub 现算），
+// 三个入口同一套参数、同一份输出。
 // 参数：
 //   regions=JP,US      地区（缺省 JP,US）
 //   n=20               每地区最多 N 个
@@ -46,6 +48,26 @@ function srcName(tag) {
   return (tag || "").replace(/[\d.]+\s*ms/i, "").replace(/[\d.]+\s*Mbps/i, "")
     .replace(/·(移动|电信|联通|广电)/, "").replace(/\s+/g, " ").trim();
 }
+// 来源英文标签（v1.24）：{来源} 若是中文源名，部分订阅后台（CFNext 的
+// 名单解析器）只要节点名里含中文就把整个名字清空、下发时回退成
+// 「优选IP-编号」，一排节点分不清谁是谁（其判定原文：名字含
+// [\u4e00-\u9fa5] 或竖线 | 就不走原样保留分支）。代入前统一换成
+// ASCII 标签：已知来源查下表；未知来源去掉非 ASCII 字符与竖线兜底；
+// 再为空（纯中文未收录 / 本就无来源标注）用 Src+同地区序号占位。
+// 保证 {来源} 永远产出非空、无中文、无竖线的名字，哪个后台都原样保留。
+const SRC_LABELS = {
+  "优选高速": "Gaosu", "微测优选": "Wetest", "微测": "Wetest",
+  "反代入口": "Fandai", "官方CF": "OfficialCF", "天诚优选": "Tiancheng",
+  "S5公益": "S5Gongyi", "辣椒优选": "Lajiao", "辣子鸡": "Laziji",
+  "CM优选": "CM", "麒麟优选": "Qilin", "洛璃优选": "Luoli", "Mia优选": "Mia",
+};
+function srcLabel(tag, seq) {
+  const raw = srcName(tag);
+  if (SRC_LABELS[raw]) return SRC_LABELS[raw];
+  const ascii = raw.replace(/[^\x20-\x7E]/g, "").replace(/\|/g, "")
+    .replace(/\s+/g, " ").trim();
+  return ascii || `Src${seq}`;
+}
 // fmt 模板（页面「导出格式」经订阅参数传入）：变量 {地区}{代码}{序号}{延迟}{网速}{运营商}{来源}{端口}{日期}{标签}{旗帜}
 function applyFmt(lines, fmt) {
   if (fmt === null) return renumber(lines);
@@ -61,7 +83,7 @@ function applyFmt(lines, fmt) {
       .replaceAll("{延迟}", p.srcMs !== null ? `${p.srcMs}ms` : "")
       .replaceAll("{网速}", p.srcMbps ? `${p.srcMbps}Mbps` : "")
       .replaceAll("{运营商}", p.carrier || "")
-      .replaceAll("{来源}", srcName(p.tag))
+      .replaceAll("{来源}", srcLabel(p.tag, cnt[p.region]))
       .replaceAll("{端口}", p.port || "")
       .replaceAll("{日期}", new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10))
       .replaceAll("{标签}", p.tag || "")
