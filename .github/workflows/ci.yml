@@ -10,6 +10,7 @@ on:
       - 'functions/**'
       - 'index.html'
       - 'tests/**'
+      - 'scripts/**'
       - '.github/workflows/ci.yml'
   pull_request:
 
@@ -20,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: run tests
         run: |
           node tests/audit-fixes.mjs
