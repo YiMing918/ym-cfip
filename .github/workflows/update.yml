@@ -40,13 +40,27 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "data: 自动聚合 $(date +'%Y-%m-%d %H:%M')"
-            git pull --rebase origin main
-            git push
+            pushed=0
+            for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then pushed=1; break; fi
+            git rebase --abort 2>/dev/null || true
+            if [ "$i" -lt 3 ]; then echo "push 失败，10 秒后重试（第 $i 次）"; sleep 10; fi
+            done
+            if [ "$pushed" != "1" ]; then echo "::error::push 重试 3 次仍失败"; exit 1; fi
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
       # 可选：直传型 Pages 项目（未连 Git）可用部署令牌自动推送更新。
       # 需在仓库 Settings → Secrets 添加 CLOUDFLARE_API_TOKEN 与 CLOUDFLARE_ACCOUNT_ID；
       # 没配令牌时本步自动跳过，不影响聚合与提交（Fork 用户无感）。
+      # 部署工具 wrangler 走仓库锁文件（package-lock.json）钉死版本，不现拉最新版，
+      # 避免工具半夜升版把部署顶坏；下面两步与部署步同一条件，没配令牌时一并跳过。
+      - uses: actions/setup-node@v4
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' && steps.commit.outputs.changed == 'true' }}
+        with:
+          node-version: '22'
+      - name: 按锁文件装部署工具
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' && steps.commit.outputs.changed == 'true' }}
+        run: npm ci --no-audit --no-fund
       - name: 推送部署到 Cloudflare Pages（仅当配了部署令牌）
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && steps.commit.outputs.changed == 'true' }}
         run: |
@@ -54,7 +68,7 @@ jobs:
           cp index.html _headers dist/
           cp -r data/. dist/data/
           cp -r functions/. dist/functions/
-          npx -y wrangler@3 pages deploy dist --project-name ym-cfip --branch main --commit-dirty=true
+          npx -y wrangler pages deploy dist --project-name ym-cfip --branch main --commit-dirty=true
 
       - name: 心跳保活（防 GitHub 60 天无活动停用定时任务）
         # 不用 if: always()：聚合步骤失败时心跳提交会把失败轮伪装成有活动，
@@ -68,8 +82,13 @@ jobs:
             date -u +"%Y-%m-%dT%H:%M:%SZ" > .heartbeat
             git add .heartbeat
             git commit -m "heartbeat: 保活定时任务"
-            git pull --rebase origin main
-            git push
+            pushed=0
+            for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then pushed=1; break; fi
+            git rebase --abort 2>/dev/null || true
+            if [ "$i" -lt 3 ]; then echo "push 失败，10 秒后重试（第 $i 次）"; sleep 10; fi
+            done
+            if [ "$pushed" != "1" ]; then echo "::error::push 重试 3 次仍失败"; exit 1; fi
           else
             echo "仓库近期有活动，无需心跳提交"
           fi
