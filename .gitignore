@@ -1,0 +1,10 @@
+# 本地杂物与密钥，绝不进仓库
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+*.local.*
+dist/
+.DS_Store
+__pycache__/
+*.pyc
