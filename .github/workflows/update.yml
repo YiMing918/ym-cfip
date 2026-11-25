@@ -23,8 +23,8 @@ jobs:
       WEICE_KEY: ${{ secrets.WEICE_KEY }}
       HOSTMONIT_KEY: ${{ secrets.HOSTMONIT_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: 抓取并聚合
@@ -54,7 +54,7 @@ jobs:
       # 没配令牌时本步自动跳过，不影响聚合与提交（Fork 用户无感）。
       # 部署工具 wrangler 走仓库锁文件（package-lock.json）钉死版本，不现拉最新版，
       # 避免工具半夜升版把部署顶坏；下面两步与部署步同一条件，没配令牌时一并跳过。
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && steps.commit.outputs.changed == 'true' }}
         with:
           node-version: '22'
