@@ -94,16 +94,19 @@ function validPort(port) {
     && Number(port) > 0 && Number(port) <= 65535;
 }
 const LINE_RE = /^(\[([0-9a-fA-F:.]+)\]|(\d{1,3}(?:\.\d{1,3}){3})):(\d+)(#(.*))?$/;
-// # 后缀必须是本站自己的标注语法（#地区序号 + 可选 [来源标签]）：此前 #.*
-// 不限内容，等于允许在本域名下托管任意文本（/s/<id> 以 text/plain 公开
-// 读出）。标签内只许文字/数字/常见标点并限长，尖括号与控制字符一律拒绝。
-const LABEL_RE = /^([A-Z]{2}\d*|IPv6\d*|SW\d*)( \[[^\[\]<>]{0,60}\])?$/;
+// # 后缀是本站自己的备注（导出格式模板生成：地区名/代码/序号/旗帜/来源等
+// 自由组合，用户还能改模板），不能按固定句式卡——v1.25 起默认格式是中文
+// 地区打头，旧的「代码打头」正则把本站自己生成的行全拒了（存快照必 400）。
+// 安全口径不变：限长 80、不许尖括号/# /控制字符（防在本域名下托管任意
+// 文本/HTML），且至少含一个文字或数字（纯符号不算备注）。
+const LABEL_RE = /^[^\x00-\x1f\x7f<>#]{1,80}$/;
+const LABEL_HAS_WORD = /[\p{L}\p{N}]/u;
 function lineOk(l) {
   const m = l.match(LINE_RE);
   if (!m) return false;
   if (m[3] !== undefined && !validIPv4(m[3])) return false;
   if (m[2] !== undefined && !validIPv6Global(m[2])) return false;
-  if (m[6] !== undefined && !LABEL_RE.test(m[6])) return false;
+  if (m[6] !== undefined && !(LABEL_RE.test(m[6]) && LABEL_HAS_WORD.test(m[6]))) return false;
   return validPort(m[4]);
 }
 
