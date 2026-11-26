@@ -67,13 +67,31 @@ jobs:
           data/sw.txt
           data/top.txt
           data/usjp.txt
+          functions/_preset.js
+          functions/_sub_core.js
           functions/s/[id].js
+          functions/s/[id].txt.js
           functions/save.js
           functions/sub.js
+          functions/sub.txt.js
           index.html
           scripts/aggregate.py
           seed-usjp.txt
           PACKLIST
+          # 打包自检：functions 里每个相对引用（import/export ... from "./…"）
+          # 的目标都必须在包里，缺一个就当场失败——清单漏文件曾打出装上
+          # 就报错的残缺包，这一步就是堵它的。
+          fail=0
+          while IFS= read -r js; do
+            [ -n "$js" ] || continue
+            dir=$(dirname "$js")
+            for ref in $(grep -oE 'from "[.][^"]+"' "$js" | sed 's/^from "//; s/"$//' || true); do
+              if [ ! -f "$dir/$ref" ]; then echo "::error::$js 引用了 $ref，但包里没有这个文件"; fail=1; fi
+            done
+          done <<EOF
+          $(find stage/functions -name '*.js' -type f)
+          EOF
+          if [ "$fail" != "0" ]; then echo "::error::部署包不完整，已中止打包"; exit 1; fi
           find stage -type f -exec touch -d '1980-01-01 00:00:00' {} +
           cd stage
           find . -type f | sed 's|^\./||' | LC_ALL=C sort | zip -q -X -D "../$ZIPNAME" -@
