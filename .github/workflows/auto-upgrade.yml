@@ -18,7 +18,9 @@ permissions:
   actions: write
 
 concurrency:
-  group: auto-upgrade-ym-cfip
+  # 与聚合工作流（update.yml）同组串行：本流水线会提交并推送 main，
+  # 两条流水线若同时跑，裸 push 会互相顶掉、丢掉一边的提交。
+  group: aggregate
   cancel-in-progress: false
 
 jobs:
@@ -58,6 +60,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          push_retry() {
+            pushed=0
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push; then pushed=1; break; fi
+              git rebase --abort 2>/dev/null || true
+              if [ "$i" -lt 3 ]; then echo "push 失败，10 秒后重试（第 $i 次）"; sleep 10; fi
+            done
+            if [ "$pushed" != "1" ]; then echo "::error::push 重试 3 次仍失败"; exit 1; fi
+          }
           DATE=$(TZ=Asia/Shanghai date +%F)
           echo "last auto-upgrade run: $DATE" > .github/auto-upgrade-heartbeat.txt
           git config user.name "github-actions[bot]"
@@ -65,12 +76,12 @@ jobs:
           if git diff --quiet -- package.json package-lock.json; then
             git add .github/auto-upgrade-heartbeat.txt
             git commit -m "chore: 每周试升级心跳 $DATE [skip ci]"
-            git push
+            push_retry
             echo "本周没有可升级的依赖，已留心跳。"
           else
             git add package.json package-lock.json .github/auto-upgrade-heartbeat.txt
             git commit -m "auto-upgrade: 依赖周更 $DATE（测试全过）"
-            git push
+            push_retry
             gh workflow run update.yml --ref main
             echo "已提交升级并触发聚合工作流（用新版工具真跑一轮）。"
           fi
