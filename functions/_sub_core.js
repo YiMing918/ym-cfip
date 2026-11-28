@@ -25,6 +25,9 @@ const LINE_RE = /^(\S+?)#([A-Z]{2})\d*\s*(?:\[(.*)\])?$/;
 // 后台能把地区提炼成「地区-序号」，与天诚等源在它里面的样子一致
 // （提炼规则见下方 {来源} 处的说明）；别的后台原样显示也一眼能
 // 分清地区。方括号里的源标注原样保留在名字尾巴上。
+// loadPool / parseLine / applyFmt / NAMES 自 v1.33 起导出，供
+// _locmap.js（测地区结果订阅）复用同一套取池缓存、行解析与命名逻辑，
+// 保证订阅出链与页面导出、与 /sub 三个出口的口径永远一致。
 function renumber(lines) {
   const cnt = {};
   return lines.map(l => l.replace(/^(\S+?)#(IPv6|[A-Z]{2})\d*/, (m, a, cc) => {
@@ -34,7 +37,7 @@ function renumber(lines) {
   }));
 }
 
-const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',IR:'伊朗',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦',LA:'老挝',ZA:'南非',MM:'缅甸',BD:'孟加拉',NP:'尼泊尔',LK:'斯里兰卡'};
+export const NAMES = {CN:'中国',SW:'三网专区',HK:'香港',TW:'台湾',JP:'日本',KR:'韩国',SG:'新加坡',US:'美国',GB:'英国',DE:'德国',FR:'法国',NL:'荷兰',CA:'加拿大',AU:'澳大利亚',IN:'印度',ID:'印尼',TH:'泰国',VN:'越南',PH:'菲律宾',MY:'马来西亚',AE:'阿联酋',AR:'阿根廷',OM:'阿曼',SA:'沙特',EG:'埃及',BR:'巴西',MX:'墨西哥',CL:'智利',NZ:'新西兰',CH:'瑞士',SE:'瑞典',NO:'挪威',DK:'丹麦',FI:'芬兰',PL:'波兰',ES:'西班牙',IT:'意大利',PT:'葡萄牙',IE:'爱尔兰',BE:'比利时',AT:'奥地利',CZ:'捷克',GR:'希腊',TR:'土耳其',IL:'以色列',IR:'伊朗',RU:'俄罗斯',UA:'乌克兰',KZ:'哈萨克斯坦',TM:'土库曼斯坦',KH:'柬埔寨',PK:'巴基斯坦',LV:'拉脱维亚',EE:'爱沙尼亚',LT:'立陶宛',BG:'保加利亚',RO:'罗马尼亚',MD:'摩尔多瓦',RS:'塞尔维亚',IS:'冰岛',AM:'亚美尼亚',CY:'塞浦路斯',AL:'阿尔巴尼亚',DO:'多米尼加',HU:'匈牙利',GE:'格鲁吉亚',BY:'白俄罗斯',AZ:'阿塞拜疆',KG:'吉尔吉斯斯坦',LA:'老挝',ZA:'南非',MM:'缅甸',BD:'孟加拉',NP:'尼泊尔',LK:'斯里兰卡'};
 function flagEmoji(cc) {
   if (!cc || !/^[A-Z]{2}$/.test(cc) || cc === "SW") return "";
   return String.fromCodePoint(...[...cc].map(c => 127397 + c.charCodeAt(0)));
@@ -64,7 +67,7 @@ function srcName(tag) {
 // 未知来源、ASCII 来源都原样；无来源标注就空着（多余空格会被
 // applyFmt 压掉）。
 // fmt 模板（页面「导出格式」经订阅参数传入）：变量 {地区}{代码}{序号}{延迟}{网速}{运营商}{来源}{端口}{日期}{标签}{旗帜}
-function applyFmt(lines, fmt) {
+export function applyFmt(lines, fmt) {
   if (fmt === null) return renumber(lines);
   const cnt = {};
   return lines.map(l => {
@@ -89,7 +92,7 @@ function applyFmt(lines, fmt) {
 }
 const TLS_PORTS = new Set(["443", "8443", "2053", "2083", "2087", "2096"]);
 
-function parseLine(line) {
+export function parseLine(line) {
   const m = line.match(LINE_RE);
   if (!m) return null;
   const tag = m[3] || "";
@@ -119,7 +122,7 @@ function shuffle(arr) {
 // 新一轮聚合发布会换新部署进程，缓存不会跨版本读到旧数据。
 const poolCache = new Map();
 const POOL_TTL_MS = 120 * 1000;
-async function loadPool(context, origin, file) {
+export async function loadPool(context, origin, file) {
   const hit = poolCache.get(file);
   if (hit && Date.now() - hit.ts < POOL_TTL_MS) return hit.lines;
   const dataUrl = new URL(file, origin);
