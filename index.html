@@ -1755,27 +1755,40 @@ $('btnTopLink').addEventListener('click', () =>
   let locTested = [];  // 本轮测过的 {ip, p, colo}，渲染结果列表用
   let locByIp = new Map(); // ip -> {line, p}（重试未识别时复用）
   let locRunning = false, locStop = false;
-  async function locFetchTrace(host){
+  async function locFetchTrace(host, port){
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 6000);
     try{
-      const r = await fetch(`https://${host}/cdn-cgi/trace`, { signal: ctl.signal, cache: 'no-store' });
+      // 必须带条目自己的端口读（v1.31.2 补）：端口写在子域名后面，证书
+      // 校验看的是域名、与端口无关；老版不带端口一律走 443，清单里
+      // 8443/2053/9443 等非 443 条目永远读不到、必然未识别。
+      const r = await fetch(`https://${host}:${port}/cdn-cgi/trace`, { signal: ctl.signal, cache: 'no-store' });
       if(!r.ok) return null;
       const m = (await r.text()).match(/^colo=([A-Z]{3})$/m);
       return m ? m[1] : null;
     }catch(e){ return null; }
     finally{ clearTimeout(timer); }
   }
-  async function locTraceRetry(host){
-    // 一个 host 最多读 3 次：临时域名刚建好时解析可能还没传播到本地、
-    // 或偶发失败，CF 段的失败多半值得重试；3 次都读不到才记未识别。
-    let colo = await locFetchTrace(host);
+  async function locTraceRetry(host, port){
+    // 一个地址（host:端口）最多读 3 次：临时域名刚建好时解析可能还没
+    // 传播到本地、或偶发失败，CF 段的失败多半值得重试；3 次都读不到
+    // 才算这个端口没读到。
+    let colo = await locFetchTrace(host, port);
     for(const waitMs of [3000, 6000]){
       if(colo || locStop) break;
       await new Promise(r => setTimeout(r, waitMs));
-      colo = await locFetchTrace(host);
+      colo = await locFetchTrace(host, port);
     }
     return colo;
+  }
+  async function locTraceForPorts(host, ports){
+    // DNS 记录只按 IP 建（与端口无关）；同一 IP 在清单里有多个端口时
+    // 共用这一条记录，逐个端口读，任一端口读到机房即算识别。
+    for(const port of ports){
+      const colo = await locTraceRetry(host, port);
+      if(colo || locStop) return colo;
+    }
+    return null;
   }
   function renderLocList(){
     if(!locTested.length){ $('loclist').innerHTML = ''; return; }
@@ -1837,8 +1850,9 @@ $('btnTopLink').addEventListener('click', () =>
       await Promise.all(Array.from({ length: 8 }, async () => {
         while(idx < batch.length && !locStop){
           const ip = batch[idx++];
-          const colo = hostByIp[ip] ? await locTraceRetry(hostByIp[ip]) : null;
-          locApplyResult(ip, byIp.get(ip).p, colo);
+          const ent = byIp.get(ip);
+          const colo = hostByIp[ip] ? await locTraceForPorts(hostByIp[ip], ent.ports && ent.ports.length ? ent.ports : ['443']) : null;
+          locApplyResult(ip, ent.p, colo);
           onDone();
         }
       }));
@@ -1894,7 +1908,11 @@ $('btnTopLink').addEventListener('click', () =>
       const p = parseAny(l);
       const ip = p.addr.replace(/:\d+$/, '');
       if(p.addr.startsWith('[') || !/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)){ v6n++; continue; }
-      if(!byIp.has(ip)) byIp.set(ip, { line: l, p });
+      if(!byIp.has(ip)) byIp.set(ip, { line: l, p, ports: [] });
+      // 同一 IP 的每个端口都记下：记录共用一条，读 trace 时逐个端口读
+      const port = (p.addr.match(/:(\d+)$/) || [])[1];
+      const ent = byIp.get(ip);
+      if(port && !ent.ports.includes(port)) ent.ports.push(port);
     }
     const ips = [...byIp.keys()];
     if(!ips.length){ toast('清单里没有 IPv4 地址，测地区只支持 IPv4'); return; }
