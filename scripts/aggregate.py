@@ -2,7 +2,8 @@
 """YM 优选 IP 站 · 数据聚合脚本
 
 定时（GitHub Actions 每 2 小时）抓取公开优选源，去重、统一为
-「IP:端口#地区 [类型]」格式，生成 data/*.txt + data/meta.json。
+「IP:端口#地区 [类型]」格式，生成 data/*.txt + data/meta.json，
+另给非 CF 段 IP 生成 data/geo.json（注册地补标，见文末 GEO 段）。
 只做聚合与格式整理：IP 条目只做格式/合法段校验 + 去重，不做连通
 探测、不测速、不测活；域名池另做 DNS 解析筛选（能解析才留）。
 延迟/速度口径见各源标注，是否可用以访客本地检测为准。
@@ -961,6 +962,166 @@ def parse_v6(text, tag):
     return out
 
 
+# ---------- 注册地补标（v1.32）：非 CF 段 IP 的所在地国家 + 运营商 ----------
+# 「检测地区」只能实测 Cloudflare 任播 IP 的机房；总池里大量第三方中转
+# 服务器（阿里云 / AWS 等的 VPS）多数不回 trace、读不到机房。但这类
+# 服务器物理位置固定，聚合时给它们补一份「所在地国家 + 运营商」写进
+# data/geo.json，页面对实测读不到的条目用注册地补标（与实测明确分开），
+# 按地区导出的名单才能把这批节点正确收回去。
+#
+# 数据源选型（2026-11-28 实测）：同为 ip-location-db 的免费库、无需
+# 密钥、无调用限额。先试过 iptoasn-country：它给的是 ASN 登记国（阿里
+# 云整段记 CN）且 mmdb 里没有运营商字段——东京的阿里云会被标成 CN，
+# 正是本站最忌讳的假地区，不合用；geo-asn-country 是「一个 ASN 一个
+# 国家」更粗（阿里云整段记 SG）。最终用同项目的 GeoLite2-Country
+# （按网段的所在地国家）+ GeoLite2-ASN（运营商）：实测 8.216.44.94 →
+# JP / Alibaba (US) Technology、47.237.85.7 → SG / Alibaba、
+# 13.193.212.73 → JP / Amazon，与 ipinfo、ip-api 的结果一致。
+GEO_DB_URLS = {
+    "country": [
+        "https://github.com/sapics/ip-location-db/releases/download/latest/geolite2-country-ipv4.mmdb",
+        "https://cdn.jsdelivr.net/npm/@ip-location-db/geolite2-country-mmdb/geolite2-country-ipv4.mmdb",
+    ],
+    "asn": [
+        "https://github.com/sapics/ip-location-db/releases/download/latest/geolite2-asn-ipv4.mmdb",
+        "https://cdn.jsdelivr.net/npm/@ip-location-db/geolite2-asn-mmdb/geolite2-asn-ipv4.mmdb",
+    ],
+}
+# CF 官方任播段：与页面 index.html 的 CF_RANGES 同口径（那边是数值
+# 写法），改一处必须同步另一处。这些段只认实测落地，不进 geo.json。
+GEO_CF_CIDRS = ["104.16.0.0/12", "172.64.0.0/13", "162.159.0.0/16",
+                "198.41.128.0/17", "173.245.48.0/20", "103.21.244.0/22",
+                "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+                "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+                "197.234.240.0/22"]
+_GEO_CF_NETS = [ipaddress.IPv4Network(c) for c in GEO_CF_CIDRS]
+
+
+def _is_cf_ip(ip):
+    try:
+        addr = ipaddress.IPv4Address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for net in _GEO_CF_NETS)
+
+
+# 运营商短名归一化：ASN org 原始串 → 页面展示短名（大小写不敏感子串
+# 匹配，先匹配先得）。没命中的走 _org_short 的兜底清洗（剥公司后缀、
+# 截断），不硬编造。
+GEO_ORG_SHORT = [
+    ("alibaba", "阿里云"), ("amazon", "AWS"), ("google", "Google Cloud"),
+    ("oracle", "Oracle"), ("tencent", "腾讯云"), ("microsoft", "Azure"),
+    ("digitalocean", "DigitalOcean"), ("vultr", "Vultr"),
+    ("choopa", "Vultr"), ("the constant", "Vultr"),
+    ("ovh", "OVH"), ("hetzner", "Hetzner"),
+    ("linode", "Linode"), ("akamai", "Akamai"), ("huawei", "华为云"),
+    ("baidu", "百度云"), ("ucloud", "UCloud"),
+    ("cloudflare", "Cloudflare"), ("leaseweb", "LeaseWeb"),
+    ("contabo", "Contabo"), ("zenlayer", "Zenlayer"), ("gcore", "Gcore"),
+    ("g-core", "Gcore"), ("cogent", "Cogent"), ("m247", "M247"),
+    ("hostinger", "Hostinger"), ("kamatera", "Kamatera"),
+    ("lightnode", "LightNode"),
+]
+_ORG_SUFFIX_RE = re.compile(
+    r"[\s,]+(inc|llc|ltd|limited|corp|corporation|company|co|gmbh|"
+    r"pte|pty|holdings|group|technologies|technology)\.?$", re.I)
+
+
+def _org_short(org):
+    raw = (org or "").strip()
+    if not raw:
+        return ""
+    low = raw.lower()
+    for key, short in GEO_ORG_SHORT:
+        if key in low:
+            return short
+    s = raw
+    for _ in range(3):
+        s2 = _ORG_SUFFIX_RE.sub("", s).strip(" ,")
+        if s2 == s:
+            break
+        s = s2
+    return (s or raw)[:24]
+
+
+def build_geo_map(ips, lookup):
+    """ips: 唯一 IPv4 列表；lookup(ip) -> (cc, org 原始串) | None。
+    CF 段不查不写；查不到不写；cc 不在白名单不写。
+    返回 {ip: [cc, 运营商短名]}。"""
+    out = {}
+    for ip in ips:
+        if _is_cf_ip(ip):
+            continue
+        try:
+            hit = lookup(ip)
+        except Exception:  # noqa: BLE001 — 单个 IP 查询异常不拖垮整批
+            hit = None
+        if not hit:
+            continue
+        cc, org = hit
+        if cc not in CC_WHITELIST:
+            continue
+        out[ip] = [cc, _org_short(org)]
+    return out
+
+
+def _download_mmdb(urls, dest):
+    last = None
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+            if len(data) < 100_000:  # 404 页/空文件不是 mmdb
+                raise ValueError(f"file too small: {len(data)}")
+            dest.write_bytes(data)
+            return
+        except Exception as exc:  # noqa: BLE001 — 逐个备用地址试
+            last = exc
+    raise RuntimeError(f"mmdb download failed: {last}")
+
+
+def _open_geo_lookup():
+    """下载两个 mmdb 并打开，返回 lookup(ip) -> (cc, org) | None。
+    下载/打开失败直接抛异常，由调用方保留上轮 geo.json 兜底。"""
+    import tempfile
+
+    import maxminddb  # update.yml 里 pip install；没装时 ImportError 给调用方兜
+    tmp = Path(tempfile.mkdtemp(prefix="ymcfip-geo-"))
+    cpath, apath = tmp / "country.mmdb", tmp / "asn.mmdb"
+    _download_mmdb(GEO_DB_URLS["country"], cpath)
+    _download_mmdb(GEO_DB_URLS["asn"], apath)
+    rc = maxminddb.open_database(str(cpath))
+    ra = maxminddb.open_database(str(apath))
+
+    def lookup(ip):
+        crec = rc.get(ip) or {}
+        cc = crec.get("country_code") or \
+            (crec.get("country") or {}).get("iso_code")
+        if not cc:
+            return None
+        arec = ra.get(ip) or {}
+        return cc, arec.get("autonomous_system_organization") or ""
+
+    return lookup
+
+
+def write_geo_json(lines, lookup=None):
+    """从总池行里抽唯一 IPv4，生成 data/geo.json（只收非 CF 段）。
+    lookup 为 None 时走真实数据库——下载失败会抛异常且不写文件，
+    由 main 的兜底保留上一轮 geo.json。返回写入条数。"""
+    ips = sorted({m.group(1) for line in lines
+                  if (m := LOOSE_RE.match(line))
+                  and valid_ipv4(m.group(1))})
+    if lookup is None:
+        lookup = _open_geo_lookup()
+    geo = build_geo_map(ips, lookup)
+    (DATA / "geo.json").write_text(
+        json.dumps(geo, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8")
+    return len(geo)
+
+
 def main():
     baseline = load_baseline()
     fallbacks = []  # 本轮用上轮基线兜底的源名（写进 meta 便于巡检发现）
@@ -1383,6 +1544,16 @@ def main():
     _save_agg_state(guard_streak, round_fb)
     (DATA / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 注册地补标数据（v1.32）：失败不影响主流程——异常时不覆盖
+    # data/geo.json，沿用上一轮的（页面对缺失条目按「未知」处理）。
+    try:
+        geo_n = write_geo_json(groups["all"])
+        print(f"[geo] 注册地补标：非 CF 段 {geo_n} 条已写入 data/geo.json")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] 注册地补标生成失败，保留上轮 geo.json：{exc}",
+              file=sys.stderr)
+
     print(json.dumps({k: v["count"] for k, v in meta_groups.items()},
                      ensure_ascii=False))
 
