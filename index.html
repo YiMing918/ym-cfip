@@ -293,11 +293,11 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card loc-off" id="cLoc">
   <h3>检测地区（实测落地）</h3>
-  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测地区导出」，名字、分组全按实测地区重排。没识别出的条目可以点「重试未识别」再测一遍（第三方中转服务器大多读不到机房，重试也多半没用，属正常）。</div>
+  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测/注册地导出」，名字、分组全按识别地区重排。第三方中转服务器实测多半读不到机房，这类会用聚合时查好的 IP 注册地补标（行里标「注册地」，与实测明确分开）；要是你测过的延迟与注册地明显对不上（比如注册在美国却只要几十毫秒），那行会被标出来、且不进导出。没识别出、也没补上注册地的条目可以点「重试未识别」再测一遍（主要是 CF 官方段的偶发失败）。</div>
   <div class="ctrl">
     <button class="btn primary" id="btnLoc">🌏 开始测地区</button>
     <button class="btn" id="btnLocStop" style="display:none">停止</button>
-    <button class="btn" id="btnLocExport" disabled>按实测地区导出</button>
+    <button class="btn" id="btnLocExport" disabled>按实测/注册地导出</button>
     <button class="btn" id="btnLocRetry" style="display:none">重试未识别</button>
     <span class="selinfo" id="locinfo">对当前清单（②生成的结果）逐个测实测落地；清单为空时先在②生成清单。</span>
   </div>
@@ -1751,6 +1751,56 @@ $('btnTopLink').addEventListener('click', () =>
     const n = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
     return CF_RANGES.some(([base, bits]) => (n >>> (32 - bits)) === (base >>> (32 - bits)));
   }
+  // 注册地补标（v1.32）：实测读不到机房的第三方条目，用聚合时生成的
+  // data/geo.json（非 CF 段 IP 的所在地国家 + 运营商，聚合脚本每轮更新）
+  // 补标。物理服务器位置固定，注册地就是它的实际所在地（转发出去也基本
+  // 落到附近机房）；与实测是两回事：行里带「注册地」标签、摘要分开计数、
+  // 导出时在提示里报明含多少条补标，绝不冒充实测。
+  let geoMap = null;   // ip -> [cc, org]（第一次测地区时懒加载，失败当空表）
+  let geoLoc = {};     // ip -> {cc, org, suspect}（本轮补标结果）
+  async function loadGeo(){
+    if(geoMap) return geoMap;
+    try{ const r = await fetch('data/geo.json'); geoMap = r.ok ? await r.json() : {}; }
+    catch(e){ geoMap = {}; }
+    if(!geoMap || typeof geoMap !== 'object' || Array.isArray(geoMap)) geoMap = {};
+    return geoMap;
+  }
+  // 延迟交叉校验的粗略带（只抓离谱的，宁宽勿严）：[下限, 上限]，null
+  // 表示不限。口径是国内访客测出的延迟：注册 US 却 <80ms 不可能（跨
+  // 太平洋往返都不止）、JP/KR 却 >250ms、HK/TW 却 >150ms、SG 却 <35ms
+  // （比到香港还快）或 >250ms，都说明这个注册地多半靠不住。不在表里
+  // 的国家不校验；没测过可用、没有延迟值的也不校验（不冤枉）。
+  const GEO_LAT_BAND = { US: [80, null], JP: [null, 250], KR: [null, 250],
+                         HK: [null, 150], TW: [null, 150], SG: [35, 250] };
+  function geoLatSuspect(cc, ms){
+    if(ms === null || ms === undefined || ms < 0) return false;
+    const b = GEO_LAT_BAND[cc];
+    if(!b) return false;
+    return (b[0] !== null && ms < b[0]) || (b[1] !== null && ms > b[1]);
+  }
+  function locLatencyMs(ip){
+    // 本次会话「检测本地可用」留下的延迟（lat[addr]，>=0 才算数）；
+    // 同一 IP 多个端口取最小的一个。没有就返回 null（不参与校验）。
+    const ent = locByIp.get(ip);
+    const ports = ent && ent.ports && ent.ports.length ? ent.ports : ['443'];
+    let best = null;
+    for(const port of ports){
+      const v = lat[ip + ':' + port];
+      if(typeof v === 'number' && v >= 0 && (best === null || v < best)) best = v;
+    }
+    return best;
+  }
+  function locApplyGeo(){
+    geoLoc = {};
+    if(!geoMap) return;
+    for(const t of locTested){
+      if(t.colo || t.notBuilt) continue;   // 实测读到的、没测成的不补标
+      const g = geoMap[t.ip];
+      if(!Array.isArray(g) || !g[0]) continue;
+      geoLoc[t.ip] = { cc: g[0], org: g[1] || '',
+                       suspect: geoLatSuspect(g[0], locLatencyMs(t.ip)) };
+    }
+  }
   let realLoc = {};    // ip -> {colo, cc}（只存识别成功的）
   let locTested = [];  // 本轮测过的 {ip, p, colo}，渲染结果列表用
   let locByIp = new Map(); // ip -> {line, p}（重试未识别时复用）
@@ -1801,6 +1851,11 @@ $('btnTopLink').addEventListener('click', () =>
         mis = cc !== p.region;
         cell = `${esc(colo)} ${esc(locCity(colo))} · ${esc(NAMES[cc] || cc)}`;
       } else if(colo){ cell = `${esc(colo)}（未归类）`; }
+      else if(geoLoc[t.ip]){
+        const g = geoLoc[t.ip];
+        cell = `<span class="tag">注册地</span> ${esc(NAMES[g.cc] || g.cc)}${g.org ? ' · ' + esc(g.org) : ''}` +
+          (g.suspect ? ' <span class="tag" style="color:var(--bad)">⚠️ 延迟与注册地明显不符</span>' : '');
+      }
       else cell = '未识别';
       return `<tr${mis ? ' style="background:rgba(255,80,80,.12)"' : ''}><td class="addr">${esc(p.addr)}</td>` +
         `<td><span class="region">${esc(p.region)}</span> <span class="tag">${esc(NAMES[p.region] || '')}</span></td>` +
@@ -1809,22 +1864,25 @@ $('btnTopLink').addEventListener('click', () =>
     $('loclist').innerHTML = `<div class="tblwrap scrollbox" style="max-height:300px"><table><thead><tr><th>地址</th><th>源标注地区</th><th>实测地区</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function locStats(){
-    let ok = 0, mis = 0, unCf = 0, unTp = 0, unOther = 0, nb = 0;
+    let ok = 0, mis = 0, geo = 0, geoSus = 0, unCf = 0, unTp = 0, unOther = 0, nb = 0;
     for(const t of locTested){
       if(t.notBuilt){ nb++; continue; }   // 临时记录没建成：没测成，不算未识别
       if(t.colo && COLO_CC[t.colo]){ ok++; if(COLO_CC[t.colo] !== t.p.region) mis++; }
       else if(t.colo) unOther++;          // 读到了机房，但不在地区对照表里
+      else if(geoLoc[t.ip]){ geo++; if(geoLoc[t.ip].suspect) geoSus++; }  // 注册地补标（geoSus 是其中延迟打脸的子集）
       else if(ipInCfRanges(t.ip)) unCf++; // CF 官方段、这次没读到（可重试）
-      else unTp++;                        // 第三方中转服务器，多半读不到
+      else unTp++;                        // 第三方且无注册地数据
     }
-    return { ok, mis, unCf, unTp, unOther, nb, total: locTested.length };
+    return { ok, mis, geo, geoSus, unCf, unTp, unOther, nb, total: locTested.length };
   }
-  function locUnrecText(st){
-    const x = st.unCf + st.unTp + st.unOther;
-    if(!x) return '';
-    let s = ` · 未识别 ${x} 条：其中 CF 官方段 ${st.unCf} 条（这次没读到，可重试）、第三方中转服务器 ${st.unTp} 条（这类大多读不到机房，属正常）`;
-    if(st.unOther) s += `、另 ${st.unOther} 条读到了机房但不在地区对照表里`;
-    return s;
+  function locUnknownText(st){
+    // 「未知」段的补充说明：CF 官方段没读到是偶发、可重试，单列；
+    // 读到了机房但不在对照表里的也单列；其余（第三方无注册地数据）
+    // 不逐项解释。已补标的第三方不在这里重复计数。
+    const parts = [];
+    if(st.unCf) parts.push(`CF 官方段 ${st.unCf} 条这次没读到，可重试`);
+    if(st.unOther) parts.push(`${st.unOther} 条读到了机房但不在地区对照表里`);
+    return parts.length ? `（未知里：${parts.join('、')}）` : '';
   }
   function locApplyResult(ip, p, colo, notBuilt){
     if(colo && COLO_CC[colo]) realLoc[ip] = { colo, cc: COLO_CC[colo] };
@@ -1889,19 +1947,25 @@ $('btnTopLink').addEventListener('click', () =>
       }
     }catch(e){ errMsg = e.message || String(e); }
     finally{
+      locApplyGeo();   // 实测收尾后统一补标（重试轮同样走这里，合并回算）
       locRunning = false;
       $('btnLoc').disabled = false;
       $('btnLocStop').style.display = 'none';
-      $('btnLocExport').disabled = Object.keys(realLoc).length === 0;
+      $('btnLocExport').disabled = Object.keys(realLoc).length === 0 &&
+        !Object.values(geoLoc).some(g => !g.suspect);
       const st = locStats();
-      $('btnLocRetry').style.display = locTested.some(t => !t.colo) ? '' : 'none';
+      $('btnLocRetry').style.display = locTested.some(t => !t.colo && !geoLoc[t.ip]) ? '' : 'none';
       $('btnLocRetry').disabled = false;
       if(errMsg){
         $('locinfo').textContent = `测地区出错：${errMsg}（已测出的结果保留，临时记录已按批清理）`;
       } else if(locStop){
-        $('locinfo').textContent = `已停止：测了 ${doneN}/${ips.length} · 识别出 ${st.ok} 个 · 与源标注不符 ${st.mis} 个` + (st.nb ? ` · 另有 ${st.nb} 条临时记录没建成、没测成` : '') + '（临时记录已按批清理）';
+        $('locinfo').textContent = `已停止：测了 ${doneN}/${ips.length} · 实测识别 ${st.ok} 条 · 注册地补标 ${st.geo} 条 · 与源标注不符 ${st.mis} 条` + (st.nb ? ` · 另有 ${st.nb} 条临时记录没建成、没测成` : '') + '（临时记录已按批清理）';
       } else {
-        $('locinfo').textContent = `${isRetry ? '重试完成' : '测地区完成'}：共 ${st.total} 个 IP · 识别出 ${st.ok} 个 · 与源标注不符 ${st.mis} 个` + locUnrecText(st) + (v6n ? ` · 跳过 IPv6 ${v6n} 条` : '') + (st.nb ? ` · 另有 ${st.nb} 条临时记录没建成、没测成` : '') + '（临时记录已按批清理）';
+        $('locinfo').textContent = `${isRetry ? '重试完成' : '测地区完成'}：共 ${st.total} 个 IP · 实测识别 ${st.ok} 条 · 注册地补标 ${st.geo} 条 · 未知 ${st.unCf + st.unTp + st.unOther} 条` +
+          (st.mis ? ` · 实测与源标注不符 ${st.mis} 条` : '') +
+          (st.geoSus ? ` · 其中 ${st.geoSus} 条延迟与注册地明显不符（已标出，未进导出）` : '') +
+          locUnknownText(st) +
+          (v6n ? ` · 跳过 IPv6 ${v6n} 条` : '') + (st.nb ? ` · 另有 ${st.nb} 条临时记录没建成、没测成` : '') + '（临时记录已按批清理）';
       }
       renderLocList();
     }
@@ -1925,36 +1989,47 @@ $('btnTopLink').addEventListener('click', () =>
     const ips = [...byIp.keys()];
     if(!ips.length){ toast('清单里没有 IPv4 地址，测地区只支持 IPv4'); return; }
     locByIp = byIp;
-    realLoc = {}; locTested = [];
+    realLoc = {}; locTested = []; geoLoc = {};
     $('btnLocRetry').style.display = 'none';
     renderLocList();
+    await loadGeo();   // 注册地数据懒加载（失败当空表，不挡实测流程）
     await locRunFlow(ips, byIp, v6n, false);
   }
   async function runLocRetry(){
     if(locRunning) return;
-    // 只对「没读到机房」的条目再走一遍同一套分批流程，结果合并回
-    // 原列表与摘要；「未建成」的条目 colo 同样为空，一并重试（重新建
-    // 记录再读）；读到了机房但未归类的条目重读也是同一个机房，不重试。
-    const ips = locTested.filter(t => !t.colo).map(t => t.ip);
+    // 只对「没读到机房、也没补上注册地」的条目再走一遍同一套分批
+    // 流程，结果合并回原列表与摘要；「未建成」的条目 colo 同样为空，
+    // 一并重试（重新建记录再读）；已补标的条目实测再读也多半读不到，
+    // 不重复测；读到了机房但未归类的条目重读也是同一个机房，不重试。
+    const ips = locTested.filter(t => !t.colo && !geoLoc[t.ip]).map(t => t.ip);
     if(!ips.length){ toast('没有未识别的条目'); return; }
+    await loadGeo();
     await locRunFlow(ips, locByIp, 0, true);
   }
   function exportByRealLoc(){
-    // 只取识别出地区的条目，逐条把行里的地区代码换成实测地区，再走现有
-    // groupByRegion + formatLines 出口：序号按实测地区各自从 1 编；名字里
+    // 导出集合 = 实测条目 + 注册地补标条目（延迟与注册地明显不符的
+    // 除外），逐条把行里的地区代码换成识别地区，再走现有
+    // groupByRegion + formatLines 出口：序号按地区各自从 1 编；名字里
     // 带不带源标注方括号仍由导出格式的 {来源}/{标签} 决定（v1.28.1 口径）。
     const out = [], seen = new Set();
-    let miss = 0;
+    let miss = 0, geoN = 0;
     for(const l of RESULT){
       const p = parseAny(l);
-      const rl = realLoc[p.addr.replace(/:\d+$/, '')];
-      if(!rl){ miss++; continue; }
-      const nl = l.replace(/#[A-Z]{2}\d*/, '#' + rl.cc + '1');
+      const ip = p.addr.replace(/:\d+$/, '');
+      const rl = realLoc[ip];
+      let cc = rl ? rl.cc : null, fromGeo = false;
+      if(!cc){
+        const g = geoLoc[ip];
+        if(g && !g.suspect){ cc = g.cc; fromGeo = true; }
+      }
+      if(!cc){ miss++; continue; }
+      const nl = l.replace(/#[A-Z]{2}\d*/, '#' + cc + '1');
       if(seen.has(nl)) continue;
       seen.add(nl); out.push(nl);
+      if(fromGeo) geoN++;
     }
     if(!out.length){ toast('还没有识别出的条目，先点「开始测地区」'); return; }
-    copyText(formatLines(groupByRegion(out)).join('\n'), `已按实测地区导出 ${out.length} 条（未识别 ${miss} 条没进）`);
+    copyText(formatLines(groupByRegion(out)).join('\n'), `已按地区导出 ${out.length} 条（实测 ${out.length - geoN} 条 + 注册地补标 ${geoN} 条；没识别出的 ${miss} 条没进）`);
   }
   $('btnLoc').addEventListener('click', runLocTest);
   $('btnLocRetry').addEventListener('click', runLocRetry);
