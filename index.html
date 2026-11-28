@@ -293,11 +293,12 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card loc-off" id="cLoc">
   <h3>检测地区（实测落地）</h3>
-  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测地区导出」，名字、分组全按实测地区重排。</div>
+  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测地区导出」，名字、分组全按实测地区重排。没识别出的条目可以点「重试未识别」再测一遍（第三方中转服务器大多读不到机房，重试也多半没用，属正常）。</div>
   <div class="ctrl">
     <button class="btn primary" id="btnLoc">🌏 开始测地区</button>
     <button class="btn" id="btnLocStop" style="display:none">停止</button>
     <button class="btn" id="btnLocExport" disabled>按实测地区导出</button>
+    <button class="btn" id="btnLocRetry" style="display:none">重试未识别</button>
     <span class="selinfo" id="locinfo">对当前清单（②生成的结果）逐个测实测落地；清单为空时先在②生成清单。</span>
   </div>
   <div id="loclist" style="margin-top:8px"></div>
@@ -1729,7 +1730,7 @@ $('btnTopLink').addEventListener('click', () =>
   // 地区、或两个都测。原理：网页直连裸 IP 读不到机房（证书对不上），所以
   // 让本站 /probe 接口在部署者的域名下给每个 IP 临时建一条子域名记录，
   // 浏览器连 https://<子域名>/cdn-cgi/trace 读 colo（机房），再映射成地区；
-  // 测完（完成/停止/出错都走）调 DELETE 把本轮记录删干净。未配置 /probe
+  // 每批测完（完成/停止/出错都走）立刻调 DELETE 删这一批，不攒到最后。未配置 /probe
   // 的部署（没设那三个环境变量）整张卡不显示，其他功能零影响。
   const COLO_CC = {HKG:'HK', NRT:'JP', HND:'JP', KIX:'JP', SIN:'SG', ICN:'KR', FRA:'DE', TPE:'TW',
     LAX:'US', SJC:'US', SEA:'US', ORD:'US', DFW:'US', IAD:'US', EWR:'US', JFK:'US', BOS:'US',
@@ -1739,8 +1740,20 @@ $('btnTopLink').addEventListener('click', () =>
   const LOC_CN_EXTRA = {HND:'羽田', SLC:'盐湖城', MSP:'明尼阿波利斯', DTW:'底特律', CLT:'夏洛特',
     BNA:'纳什维尔', IAH:'休斯顿', AUS:'奥斯汀', SAN:'圣地亚哥', BOS:'波士顿', PHX:'凤凰城', LAS:'拉斯维加斯'};
   const locCity = c => COLO_CN[c] || LOC_CN_EXTRA[c] || '';
+  // CF 官方任播段：摘要拆分「未识别」时用它区分——官方段这次没读到多半
+  // 是偶发（可重试），第三方中转服务器则是结构性读不到（属正常）。
+  const CF_RANGES = [[0x68100000,12],[0xAC400000,13],[0xA29F0000,16],[0xC6298000,17],
+    [0xADF53000,20],[0x6715F400,22],[0x6716C800,22],[0x671F0400,22],[0x8D654000,18],
+    [0x6CA2C000,18],[0xBE5DF000,20],[0xBC726000,20],[0xC5EAF000,22]];
+  function ipInCfRanges(ip){
+    const p = ip.split('.').map(Number);
+    if(p.length !== 4 || p.some(isNaN)) return false;
+    const n = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+    return CF_RANGES.some(([base, bits]) => (n >>> (32 - bits)) === (base >>> (32 - bits)));
+  }
   let realLoc = {};    // ip -> {colo, cc}（只存识别成功的）
   let locTested = [];  // 本轮测过的 {ip, p, colo}，渲染结果列表用
+  let locByIp = new Map(); // ip -> {line, p}（重试未识别时复用）
   let locRunning = false, locStop = false;
   async function locFetchTrace(host){
     const ctl = new AbortController();
@@ -1754,9 +1767,12 @@ $('btnTopLink').addEventListener('click', () =>
     finally{ clearTimeout(timer); }
   }
   async function locTraceRetry(host){
+    // 一个 host 最多读 3 次：临时域名刚建好时解析可能还没传播到本地、
+    // 或偶发失败，CF 段的失败多半值得重试；3 次都读不到才记未识别。
     let colo = await locFetchTrace(host);
-    if(!colo && !locStop){
-      await new Promise(r => setTimeout(r, 3000));
+    for(const waitMs of [3000, 6000]){
+      if(colo || locStop) break;
+      await new Promise(r => setTimeout(r, waitMs));
       colo = await locFetchTrace(host);
     }
     return colo;
@@ -1777,6 +1793,97 @@ $('btnTopLink').addEventListener('click', () =>
     }).join('');
     $('loclist').innerHTML = `<div class="tblwrap scrollbox" style="max-height:300px"><table><thead><tr><th>地址</th><th>源标注地区</th><th>实测地区</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
+  function locStats(){
+    let ok = 0, mis = 0, unCf = 0, unTp = 0, unOther = 0;
+    for(const t of locTested){
+      if(t.colo && COLO_CC[t.colo]){ ok++; if(COLO_CC[t.colo] !== t.p.region) mis++; }
+      else if(t.colo) unOther++;          // 读到了机房，但不在地区对照表里
+      else if(ipInCfRanges(t.ip)) unCf++; // CF 官方段、这次没读到（可重试）
+      else unTp++;                        // 第三方中转服务器，多半读不到
+    }
+    return { ok, mis, unCf, unTp, unOther, total: locTested.length };
+  }
+  function locUnrecText(st){
+    const x = st.unCf + st.unTp + st.unOther;
+    if(!x) return '';
+    let s = ` · 未识别 ${x} 条：其中 CF 官方段 ${st.unCf} 条（这次没读到，可重试）、第三方中转服务器 ${st.unTp} 条（这类大多读不到机房，属正常）`;
+    if(st.unOther) s += `、另 ${st.unOther} 条读到了机房但不在地区对照表里`;
+    return s;
+  }
+  function locApplyResult(ip, p, colo){
+    if(colo && COLO_CC[colo]) realLoc[ip] = { colo, cc: COLO_CC[colo] };
+    const ent = { ip, p, colo: colo || null };
+    const ix = locTested.findIndex(t => t.ip === ip);
+    if(ix >= 0) locTested[ix] = ent; else locTested.push(ent); // 重试时合并回原行
+  }
+  async function locDeleteIds(ids){
+    if(!ids.length) return;
+    try{ await fetch('/probe', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }) }); }catch(e){}
+  }
+  // 一批一清（v1.31.2）：建这一批 → 等生效 → 读 trace → 立刻删这一批，
+  // 再下一批。任何时刻 zone 里存量 ≤ 一批多一点；老版把全部批次的记录
+  // 攒到最后才删，记录越攒越多、又撞上接口的删除上限，几百条时整轮
+  // 会崩成 502。中途出错也只欠当前批的清理，且 finally 里照样尝试删。
+  async function locRunBatch(batch, byIp, onDone){
+    const r = await fetch('/probe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ips: batch }) });
+    const data = await r.json().catch(() => null);
+    if(!r.ok || !data || !Array.isArray(data.hosts))
+      throw new Error((data && data.error) || ('建临时记录失败 HTTP ' + r.status));
+    const hostByIp = {}, ids = [];
+    data.hosts.forEach(h => { hostByIp[h.ip] = h.host; if(h.id) ids.push(h.id); });
+    try{
+      await new Promise(res => setTimeout(res, 4000)); // 等临时域名解析生效
+      let idx = 0;
+      await Promise.all(Array.from({ length: 8 }, async () => {
+        while(idx < batch.length && !locStop){
+          const ip = batch[idx++];
+          const colo = hostByIp[ip] ? await locTraceRetry(hostByIp[ip]) : null;
+          locApplyResult(ip, byIp.get(ip).p, colo);
+          onDone();
+        }
+      }));
+    } finally {
+      await locDeleteIds(ids);
+    }
+  }
+  async function locRunFlow(ips, byIp, v6n, isRetry){
+    locRunning = true; locStop = false;
+    $('btnLoc').disabled = true; $('btnLocRetry').disabled = true;
+    $('btnLocStop').style.display = '';
+    let doneN = 0;
+    const renderProgress = () => {
+      const st = locStats();
+      $('locinfo').textContent = `${isRetry ? '重试未识别中' : '测地区中'}… 已测 ${doneN}/${ips.length} · 识别出 ${st.ok} · 与源标注不符 ${st.mis}` + (v6n ? `（另跳过 IPv6 ${v6n} 条）` : '');
+    };
+    renderProgress();
+    let errMsg = '';
+    try{
+      for(let i = 0; i < ips.length && !locStop; i += 80){
+        await locRunBatch(ips.slice(i, i + 80), byIp, () => {
+          doneN++;
+          if(doneN % 10 === 0){ renderLocList(); renderProgress(); }
+        });
+        renderLocList(); renderProgress();
+      }
+    }catch(e){ errMsg = e.message || String(e); }
+    finally{
+      locRunning = false;
+      $('btnLoc').disabled = false;
+      $('btnLocStop').style.display = 'none';
+      $('btnLocExport').disabled = Object.keys(realLoc).length === 0;
+      const st = locStats();
+      $('btnLocRetry').style.display = locTested.some(t => !t.colo) ? '' : 'none';
+      $('btnLocRetry').disabled = false;
+      if(errMsg){
+        $('locinfo').textContent = `测地区出错：${errMsg}（已测出的结果保留，临时记录已按批清理）`;
+      } else if(locStop){
+        $('locinfo').textContent = `已停止：测了 ${doneN}/${ips.length} · 识别出 ${st.ok} 个 · 与源标注不符 ${st.mis} 个（临时记录已按批清理）`;
+      } else {
+        $('locinfo').textContent = `${isRetry ? '重试完成' : '测地区完成'}：共 ${st.total} 个 IP · 识别出 ${st.ok} 个 · 与源标注不符 ${st.mis} 个` + locUnrecText(st) + (v6n ? ` · 跳过 IPv6 ${v6n} 条` : '') + '（临时记录已按批清理）';
+      }
+      renderLocList();
+    }
+  }
   async function runLocTest(){
     if(locRunning) return;
     if(!RESULT.length){ toast('先在②生成清单，再测地区'); return; }
@@ -1791,65 +1898,19 @@ $('btnTopLink').addEventListener('click', () =>
     }
     const ips = [...byIp.keys()];
     if(!ips.length){ toast('清单里没有 IPv4 地址，测地区只支持 IPv4'); return; }
-    locRunning = true; locStop = false;
-    $('btnLoc').disabled = true; $('btnLocExport').disabled = true;
-    $('btnLocStop').style.display = '';
+    locByIp = byIp;
     realLoc = {}; locTested = [];
+    $('btnLocRetry').style.display = 'none';
     renderLocList();
-    const allIds = [];
-    let doneN = 0, okN = 0, misN = 0;
-    const renderProgress = () => {
-      $('locinfo').textContent = `测地区中… 已测 ${doneN}/${ips.length} · 识别出 ${okN} · 与源标注不符 ${misN}` + (v6n ? `（另跳过 IPv6 ${v6n} 条）` : '');
-    };
-    renderProgress();
-    let errMsg = '';
-    try{
-      for(let i = 0; i < ips.length && !locStop; i += 80){
-        const batch = ips.slice(i, i + 80);
-        const r = await fetch('/probe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ips: batch }) });
-        const data = await r.json().catch(() => null);
-        if(!r.ok || !data || !Array.isArray(data.hosts))
-          throw new Error((data && data.error) || ('建临时记录失败 HTTP ' + r.status));
-        const hostByIp = {};
-        data.hosts.forEach(h => { hostByIp[h.ip] = h.host; if(h.id) allIds.push(h.id); });
-        await new Promise(res => setTimeout(res, 4000)); // 等临时域名解析生效
-        let idx = 0;
-        await Promise.all(Array.from({ length: 8 }, async () => {
-          while(idx < batch.length && !locStop){
-            const ip = batch[idx++];
-            const ent = byIp.get(ip);
-            const colo = hostByIp[ip] ? await locTraceRetry(hostByIp[ip]) : null;
-            if(colo && COLO_CC[colo]){
-              realLoc[ip] = { colo, cc: COLO_CC[colo] };
-              okN++;
-              if(COLO_CC[colo] !== ent.p.region) misN++;
-            }
-            locTested.push({ ip, p: ent.p, colo: colo || null });
-            doneN++;
-            if(doneN % 10 === 0){ renderLocList(); renderProgress(); }
-          }
-        }));
-        renderLocList(); renderProgress();
-      }
-    }catch(e){ errMsg = e.message || String(e); }
-    finally{
-      // 完成 / 停止 / 出错都走这里：清理本轮建的全部临时记录
-      if(allIds.length){
-        try{ await fetch('/probe', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: allIds }) }); }catch(e){}
-      }
-      locRunning = false;
-      $('btnLoc').disabled = false;
-      $('btnLocStop').style.display = 'none';
-      $('btnLocExport').disabled = Object.keys(realLoc).length === 0;
-      if(errMsg){
-        $('locinfo').textContent = `测地区出错：${errMsg}（已测出的结果保留，临时记录已清理）`;
-      } else if(locStop){
-        $('locinfo').textContent = `已停止：测了 ${doneN}/${ips.length} · 识别出 ${okN} 个 · 与源标注不符 ${misN} 个（临时记录已清理）`;
-      } else {
-        $('locinfo').textContent = `测地区完成：共 ${ips.length} 个 IP · 识别出 ${okN} 个 · 与源标注不符 ${misN} 个` + (v6n ? ` · 跳过 IPv6 ${v6n} 条` : '') + '（临时记录已清理）';
-      }
-      renderLocList();
-    }
+    await locRunFlow(ips, byIp, v6n, false);
+  }
+  async function runLocRetry(){
+    if(locRunning) return;
+    // 只对「没读到机房」的条目再走一遍同一套分批流程，结果合并回
+    // 原列表与摘要；读到了机房但未归类的条目重读也是同一个机房，不重试。
+    const ips = locTested.filter(t => !t.colo).map(t => t.ip);
+    if(!ips.length){ toast('没有未识别的条目'); return; }
+    await locRunFlow(ips, locByIp, 0, true);
   }
   function exportByRealLoc(){
     // 只取识别出地区的条目，逐条把行里的地区代码换成实测地区，再走现有
@@ -1869,6 +1930,7 @@ $('btnTopLink').addEventListener('click', () =>
     copyText(formatLines(groupByRegion(out)).join('\n'), `已按实测地区导出 ${out.length} 条（未识别 ${miss} 条没进）`);
   }
   $('btnLoc').addEventListener('click', runLocTest);
+  $('btnLocRetry').addEventListener('click', runLocRetry);
   $('btnLocStop').addEventListener('click', () => { locStop = true; });
   $('btnLocExport').addEventListener('click', exportByRealLoc);
   // 未配置的部署整张卡不显示：先问 /probe，确认配好了才亮出来
