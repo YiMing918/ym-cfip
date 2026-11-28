@@ -7,16 +7,32 @@
 //   ④ 清扫：创建超 10 分钟的 cfp 记录被删，新鲜 cfp 与非 cfp 记录保留；
 //   ⑤ 存量上限：cfp 存量 + 本批 > 300 回 429；
 //   ⑥ DELETE 按 ids 删除并回 deleted 数；
-//   ⑦ Sec-Fetch-Site: cross-site 的 POST 回 403。
+//   ⑦ Sec-Fetch-Site: cross-site 的 POST 回 403；
+//   ⑧ 分块删除（v1.31.2）：删 240 个 id 能全删完——stub 模拟两个真实
+//      平台约束：批量接口单次操作 >200 整批拒绝、逐个调用超过 50 次
+//      后失败；老版「一次全删 + 逐个兜底」在这两个约束下必挂；
+//   ⑨ 分块建记录：POST 100 个 IP 全成功（逐个建会撞 50 次上限）；
+//   ⑩ 批量响应不回 id 时靠回查列表补 id；回查失败也不许拖成 502，
+//      已建好的 hosts（id 为 null）照常返回。
 
 let pass = 0, failN = 0;
 const chk = (name, cond, extra = '') => { if (cond) { pass++; console.log('PASS', name); } else { failN++; console.log('FAIL', name, extra); } };
 
 // ── 假 Cloudflare API ─────────────────────────────────────────────
+// 模拟两个真实平台约束（主会话实测）：批量接口单次操作数 >200 整批
+// 拒绝；逐个（非批量）调用累计超过 50 次后失败（子请求上限）。
 let records = [];
 let nextId = 1;
-const resetZone = () => { records = []; nextId = 1; };
+let individualCalls = 0;   // 逐个建/删的累计次数（每次 onRequest 调用前不清零，场景间靠 resetZone 清）
+let listCalls = 0;
+let dropBatchIds = false;      // 批量建的响应不回 id（记录本身有 id，靠回查补）
+let failListAfterFirst = false; // 第一次之后的列表查询全失败（模拟回查挂掉）
+const resetZone = () => {
+  records = []; nextId = 1; individualCalls = 0; listCalls = 0;
+  dropBatchIds = false; failListAfterFirst = false;
+};
 const j = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
+const err = (message, status = 500) => j({ success: false, errors: [{ message }] }, status);
 
 globalThis.fetch = async (url, opts = {}) => {
   const u = new URL(String(url));
@@ -25,13 +41,18 @@ globalThis.fetch = async (url, opts = {}) => {
   const method = (opts.method || 'GET').toUpperCase();
   const body = opts.body ? JSON.parse(opts.body) : null;
   if (method === 'GET' && /^\/zones\/[^/]+\/dns_records$/.test(path)) {
+    listCalls++;
+    if (failListAfterFirst && listCalls > 1) return err('list failed (stub)');
     return j({ success: true, result: records, result_info: { page: 1, per_page: 100, total_pages: 1, count: records.length, total_count: records.length } });
   }
   if (method === 'POST' && /^\/zones\/[^/]+\/dns_records\/batch$/.test(path)) {
+    const nOps = (body.posts || []).length + (body.deletes || []).length;
+    if (nOps > 200) return err('batch too large: max 200 operations', 400);
     const out = { posts: [], deletes: [] };
     for (const p of body.posts || []) {
       const rec = { id: 'rec' + String(nextId++).padStart(4, '0'), created_on: new Date().toISOString(), ...p };
-      records.push(rec); out.posts.push(rec);
+      records.push(rec);
+      out.posts.push(dropBatchIds ? (({ id, ...rest }) => rest)(rec) : rec);
     }
     for (const d of body.deletes || []) {
       const i = records.findIndex(r => r.id === d.id);
@@ -40,11 +61,15 @@ globalThis.fetch = async (url, opts = {}) => {
     return j({ success: true, result: out });
   }
   if (method === 'POST' && /^\/zones\/[^/]+\/dns_records$/.test(path)) {
+    individualCalls++;
+    if (individualCalls > 50) return err('too many subrequests (stub)');
     const rec = { id: 'rec' + String(nextId++).padStart(4, '0'), created_on: new Date().toISOString(), ...body };
     records.push(rec);
     return j({ success: true, result: rec });
   }
   if (method === 'DELETE' && /^\/zones\/[^/]+\/dns_records\/[^/]+$/.test(path)) {
+    individualCalls++;
+    if (individualCalls > 50) return err('too many subrequests (stub)');
     const id = path.split('/').pop();
     const i = records.findIndex(r => r.id === id);
     if (i >= 0) records.splice(i, 1);
@@ -153,6 +178,56 @@ const ctx = (env, method, body, headers = {}) => ({
   chk('cross-site 的 POST 回 403', r.status === 403, 'status=' + r.status);
   const r2 = await onRequestPost(ctx(CFG_ENV, 'POST', { ips: ['1.2.3.4'] }, { 'Sec-Fetch-Site': 'same-origin' }));
   chk('same-origin 的 POST 放行', r2.status === 200, 'status=' + r2.status);
+}
+
+// ⑧ 分块删除：240 个 id 全删完（批量 >200 会被拒、逐个 >50 次会失败，
+// 只有 50 一组分块删能过）
+{
+  resetZone();
+  const fresh = new Date().toISOString();
+  const ids = [];
+  for (let i = 0; i < 240; i++) {
+    const id = 'bulkdel' + i;
+    ids.push(id);
+    records.push({ id, type: 'A', name: `cfpbulkdel${i}.example.com`, content: '9.9.9.9', proxied: false, ttl: 60, created_on: fresh });
+  }
+  const r = await onRequestDelete(ctx(CFG_ENV, 'DELETE', { ids }));
+  const data = await r.json();
+  chk('删 240 个 id 回 deleted=240', r.status === 200 && data.deleted === 240, JSON.stringify(data).slice(0, 120));
+  chk('删 240 后假 zone 清空', records.length === 0, 'left=' + records.length);
+  chk('分块删没靠逐个调用硬撑（逐个次数 ≤50）', individualCalls <= 50, 'individualCalls=' + individualCalls);
+}
+
+// ⑨ 分块建记录：100 个 IP 全建成（逐个建第 51 个起会被 stub 拒）
+{
+  resetZone();
+  const ips = Array.from({ length: 100 }, (_, i) => `5.5.${Math.floor(i / 250)}.${(i % 250) + 1}`);
+  const r = await onRequestPost(ctx(CFG_ENV, 'POST', { ips }));
+  const data = await r.json();
+  chk('建 100 个 IP 回 200 且 hosts=100', r.status === 200 && data.hosts && data.hosts.length === 100,
+    'status=' + r.status + ' hosts=' + (data.hosts && data.hosts.length));
+  chk('建 100 后假 zone 记录=100 且都带 id', records.length === 100 && data.hosts.every(h => h.id),
+    'records=' + records.length);
+  chk('分块建没靠逐个调用硬撑（逐个次数 ≤50）', individualCalls <= 50, 'individualCalls=' + individualCalls);
+}
+
+// ⑩ 回查补 id / 回查失败不 502
+{
+  resetZone();
+  dropBatchIds = true; // 批量响应不回 id，记录本身在 zone 里有 id
+  const r = await onRequestPost(ctx(CFG_ENV, 'POST', { ips: ['6.6.6.6', '7.7.7.7'] }));
+  const data = await r.json();
+  chk('批量不回 id 时靠回查补上 id', r.status === 200 && data.hosts && data.hosts.length === 2 && data.hosts.every(h => h.id),
+    JSON.stringify(data).slice(0, 200));
+
+  resetZone();
+  dropBatchIds = true;
+  failListAfterFirst = true; // 清扫那次列表能过，回查那次挂掉
+  const r2 = await onRequestPost(ctx(CFG_ENV, 'POST', { ips: ['6.6.6.6', '7.7.7.7'] }));
+  const data2 = await r2.json();
+  chk('回查失败不拖成 502（回 200）', r2.status === 200, 'status=' + r2.status + ' ' + JSON.stringify(data2).slice(0, 160));
+  chk('回查失败时 hosts 照常返回（id 为 null）', data2.hosts && data2.hosts.length === 2 && data2.hosts.every(h => h.id === null),
+    JSON.stringify(data2).slice(0, 200));
 }
 
 console.log(`\nTOTAL pass=${pass} fail=${failN}`);
