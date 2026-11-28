@@ -1,4 +1,5 @@
-// /probe —— 「检测地区（实测落地）」的后端接口（v1.31；v1.31.2 修分块调用）。
+// /probe —— 「检测地区（实测落地）」的后端接口（v1.31；v1.31.2 修分块调用；
+// v1.31.3 修批量接口「部分成功」——按集合差逐轮追完，见下方注释）。
 //
 // 干什么：访客在页面点「开始测地区」时，页面把一批 IP 发到这里；本接口在
 // 部署者自己的 Cloudflare 域名（zone）下，给每个 IP 临时建一条 DNS-only
@@ -32,7 +33,12 @@
 //     关掉、没调 DELETE 的孤儿记录靠它回收）。
 //   - 建/删记录一律分块走批量接口（见下方 CHUNK 注释）：批量接口单次
 //     操作数有上限、免费版每次调用的子请求也有上限，无上限逐个调用会
-//     在几百条时把额度耗尽并拖出平台 502（v1.31.2 修的就是这个）。
+//     在几百条时把额度耗尽并拖出平台 502（v1.31.2 修的就是这个）；
+//   - 批量接口还会「部分成功」：整批回 200，但 result 里只含真正成功
+//     的那部分（v1.31.3 主会话线上实测：建 80 个只回 74–78 个、删 78
+//     个只真删 19–38 个）。所以每次批量调用后必须算「请求集合 − 结果
+//     集合 = 失败集合」，只拿失败集合继续追（批量减半→逐个），追不完
+//     的如实报回页面（POST 回 failed、DELETE 回 remaining）。
 
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LABEL_PREFIX = "cfp";
@@ -124,48 +130,68 @@ async function listAllRecords(cfg) {
   return out;
 }
 
-// ── 分块调用（v1.31.2 的关键修复）──────────────────────────────
-// 实测过的两个平台约束：① 批量接口单次操作数上限约 200，超了整批被拒；
-// ② 免费版每次接口调用的子请求上限约 50——老版「批量失败就逐个删」在
-// 几百条时会撞上这个上限，一次最多真删 ~49 条，还会把后续调用的子请求
-// 额度耗尽、拖成平台 502。所以建/删一律按 50 一组走批量接口：
-// 每组失败重试一次，再失败就对半拆开继续；逐个调用只允许用在最后
-// ≤10 条的小块上兜底，绝不无上限逐个跑。
+// ── 分块调用 + 按集合差追完（v1.31.2 分块；v1.31.3 集合差）──────
+// 实测过的三个平台约束：① 批量接口单次操作数上限约 200，超了整批
+// 被拒；② 免费版每次接口调用的子请求上限约 50——无上限逐个跑会撞上
+// 它（一次最多真删 ~49 条，还会耗尽后续调用的额度拖成平台 502）；
+// ③ 批量接口会「部分成功」：整批回 200，但 result.posts/result.deletes
+// 里只含真正成功的那部分，剩下的既不报错也不出现（v1.31.2 上线后线
+// 上实测：建 80 个只回 74–78 个、删 78 个只真删 19–38 个；单个建同
+// 一个 IP 又是成功的——是批量路径零星丢，不是 IP 被拒）。
+// 所以 v1.31.3 的口径是：建/删一律 50 一组走批量接口，每次批量调用
+// 后算集合差（请求了但结果里没有的 = 失败集合），只追失败集合——
+// 先对半再批量一次，还剩的逐个处理（每组逐个上限 15 个）；全程用同
+// 一批 name/id 重试，绝不重新随机（否则会建出回执之外的记录）；追
+// 不完的如实上报（POST 的 failed、DELETE 的 remaining），不虚报。
+// 子请求预算（每次 onRequest 调用内）：POST = 列表分页 ≤4 + 清扫删
+// ≤3 组调用 + 建每组 ≤3 次批量 + ≤15 逐个 + 补 id 回查 ≤2，合计 <45；
+// DELETE 按页面实际用法（每批 ≤100 个 id = 2 组）合计 <30。
 const CHUNK = 50;
-const SINGLE_MAX = 10;
+const SINGLE_MAX = 15;
 
+// 一次批量删，返回真正删掉的 id 列表（result.deletes 里的记录对象）。
 async function batchDeleteOnce(cfg, ids) {
   const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/batch`, {
     method: "POST",
     body: JSON.stringify({ deletes: ids.map(id => ({ id })) }),
   });
-  return ((data.result && data.result.deletes) || []).length;
+  return ((data.result && data.result.deletes) || []).map(r => r && r.id).filter(Boolean);
 }
 
-// 分块删，返回实际删掉的条数（尽力而为，删不掉的残留会被下一次
-// POST 的清扫回收）。
+// 分块删 + 按集合差追完。返回 { deleted, remaining }：remaining 是
+// 追到最后仍没删掉的 id（正常应为空；非空时残留会被下一次 POST 的
+// 清扫回收，DELETE 的调用方也会从响应里如实看到）。
 async function deleteRecords(cfg, ids) {
   let deleted = 0;
-  async function delChunk(chunk) {
-    if (!chunk.length) return;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try { deleted += await batchDeleteOnce(cfg, chunk); return; }
-      catch (e) { /* 重试一次，仍失败就对半拆 */ }
+  const remaining = [];
+  // 一次批量尝试：删掉的计数，没删掉的子集原样返回待追。整批抛错
+  // （超 200 被拒/网络错）时整组都算没删掉，交给下一轮。
+  async function batchOut(chunk) {
+    if (!chunk.length) return [];
+    try {
+      const gone = new Set(await batchDeleteOnce(cfg, chunk));
+      const left = chunk.filter(id => !gone.has(id));
+      deleted += chunk.length - left.length;
+      return left;
+    } catch (e) { return chunk.slice(); }
+  }
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    let pending = await batchOut(ids.slice(i, i + CHUNK)); // 第 1 轮：整组批量
+    if (pending.length) {                                  // 第 2 轮：失败集合对半批量
+      const mid = Math.ceil(pending.length / 2);
+      const a = await batchOut(pending.slice(0, mid));
+      const b = await batchOut(pending.slice(mid));
+      pending = a.concat(b);
     }
-    if (chunk.length > SINGLE_MAX) {
-      const mid = Math.ceil(chunk.length / 2);
-      await delChunk(chunk.slice(0, mid));
-      await delChunk(chunk.slice(mid));
-      return;
-    }
-    for (const id of chunk) {
+    let singles = 0;                                       // 第 3 轮：逐个（≤15）
+    for (const id of pending) {
+      if (singles >= SINGLE_MAX) { remaining.push(id); continue; }
+      singles++;
       try { await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/${id}`, { method: "DELETE" }); deleted++; }
-      catch (e) { /* 单条删失败不中断其余 */ }
+      catch (e) { remaining.push(id); }
     }
   }
-  for (let i = 0; i < ids.length; i += CHUNK)
-    await delChunk(ids.slice(i, i + CHUNK));
-  return deleted;
+  return { deleted, remaining };
 }
 
 async function batchCreateOnce(cfg, chunk) {
@@ -176,38 +202,41 @@ async function batchCreateOnce(cfg, chunk) {
   return (data.result && data.result.posts) || [];
 }
 
-// 分块建：与删除同一套路（50 一组、失败重试一次→对半拆、逐个兜底
-// 只用在 ≤10 条的小块）。建成的记录收进 got（name -> record）。
+// 分块建 + 按集合差追完：与删除同一套路。建成的收进 got
+// （name -> record）；最终没建成的由调用方按「want 里不在 got 的」
+// 算出 IP 报回页面（failed）。重试全程用 want 里同一批 name。
 async function createRecords(cfg, want, got) {
-  async function createChunk(chunk) {
-    if (!chunk.length) return;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const recs = await batchCreateOnce(cfg, chunk);
-        for (const rec of recs) got.set(rec.name, rec);
-        break;
-      } catch (e) { /* 重试一次，仍失败走下面拆分/逐个 */ }
+  // 一次批量尝试：建成的收进 got，没建成的子集原样返回待追。
+  async function batchInto(chunk) {
+    if (!chunk.length) return [];
+    try {
+      const recs = await batchCreateOnce(cfg, chunk);
+      const done = new Set();
+      for (const rec of recs) { got.set(rec.name, rec); done.add(rec.name); }
+      return chunk.filter(w => !done.has(w.name));
+    } catch (e) { return chunk.slice(); }
+  }
+  for (let i = 0; i < want.length; i += CHUNK) {
+    let pending = await batchInto(want.slice(i, i + CHUNK)); // 第 1 轮：整组批量
+    if (pending.length) {                                    // 第 2 轮：失败集合对半批量
+      const mid = Math.ceil(pending.length / 2);
+      const a = await batchInto(pending.slice(0, mid));
+      const b = await batchInto(pending.slice(mid));
+      pending = a.concat(b);
     }
-    const missing = chunk.filter(w => !got.has(w.name));
-    if (!missing.length) return;
-    if (missing.length > SINGLE_MAX) {
-      const mid = Math.ceil(missing.length / 2);
-      await createChunk(missing.slice(0, mid));
-      await createChunk(missing.slice(mid));
-      return;
-    }
-    for (const w of missing) {
+    let singles = 0;                                         // 第 3 轮：逐个（≤15）
+    for (const w of pending) {
+      if (singles >= SINGLE_MAX) break; // 剩下的留在 got 之外，计入 failed
+      singles++;
       try {
         const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records`, {
           method: "POST",
           body: JSON.stringify({ type: "A", name: w.name, content: w.ip, proxied: false, ttl: 60 }),
         });
         if (data.result) got.set(w.name, data.result);
-      } catch (e) { /* 单条失败不中断其余，最后按缺失处理 */ }
+      } catch (e) { /* 单条失败不中断其余，最后按缺失计入 failed */ }
     }
   }
-  for (let i = 0; i < want.length; i += CHUNK)
-    await createChunk(want.slice(i, i + CHUNK));
 }
 
 export async function onRequestGet(context) {
@@ -229,13 +258,15 @@ export async function onRequestPost(context) {
   if (!ips.every(validIPv4))
     return json({ error: "invalid ips（含有不合法的 IPv4 地址）" }, 400);
   try {
-    // 先清扫孤儿 + 算存量：cfp 前缀、创建超 10 分钟的先删
+    // 先清扫孤儿 + 算存量：cfp 前缀、创建超 10 分钟的先删；存量按
+    // 「实际删掉的数」扣（集合差追完后仍没删掉的残留还占着存量）。
     const all = await listAllRecords(cfg);
     const mine = all.filter(r => r.type === "A" && isCfpName(cfg, r.name));
     const now = Date.now();
     const stale = mine.filter(r => now - Date.parse(r.created_on || 0) > STALE_MS);
-    if (stale.length) await deleteRecords(cfg, stale.map(r => r.id));
-    const alive = mine.length - stale.length;
+    let sweepDeleted = 0;
+    if (stale.length) sweepDeleted = (await deleteRecords(cfg, stale.map(r => r.id))).deleted;
+    const alive = mine.length - sweepDeleted;
     if (alive + ips.length > MAX_ALIVE)
       return json({ error: `too many temp records（临时记录存量 ${alive}，加上本批将超过上限 ${MAX_ALIVE}，请稍后再试）` }, 429);
     // 建记录：分块批量（50 一组），拆法见 createRecords
@@ -254,9 +285,12 @@ export async function onRequestPost(context) {
     }
     const hosts = want.filter(w => got.has(w.name))
       .map(w => ({ ip: w.ip, host: w.name, id: got.get(w.name).id || null }));
+    // 追到最后仍没建成的 IP 如实报回页面（failed）：页面据此把它们记
+    // 为「未建成」，不混进「未识别」里误导访客。
+    const failed = want.filter(w => !got.has(w.name)).map(w => w.ip);
     if (!hosts.length)
-      return json({ error: "create failed（临时记录一条都没建成功）" }, 502);
-    return json({ hosts });
+      return json({ error: "create failed（临时记录一条都没建成功）", failed }, 502);
+    return json({ hosts, failed });
   } catch (e) {
     return json({ error: String(e && e.message || e) }, 502);
   }
@@ -275,8 +309,8 @@ export async function onRequestDelete(context) {
   if (ids.length > 400)
     return json({ error: "invalid ids（一次最多删 400 条）" }, 400);
   try {
-    const deleted = await deleteRecords(cfg, ids);
-    return json({ deleted });
+    const { deleted, remaining } = await deleteRecords(cfg, ids);
+    return json({ deleted, remaining });
   } catch (e) {
     return json({ error: String(e && e.message || e) }, 502);
   }
