@@ -268,11 +268,11 @@ footer a{color:var(--acc2);text-decoration:none}
     <label>快照范围 <select id="snapScope">
       <option value="ok" selected>只含本地测通的（推荐）</option>
       <option value="ms">只含本地测速 ≤ 阈值</option>
-      <option value="loc">只存实测落地对得上的</option>
+      <option value="loc">按实测落地导出</option>
       <option value="all">当前清单全部</option>
     </select></label>
     <label>阈值 ≤ <input id="snapMs" type="number" value="300" min="1" style="width:84px"> ms</label>
-    <span class="selinfo">「测通」以你在本页的检测 / 测速结果为准：超时的、没测的，都不进快照。「实测落地对得上」指检测 / 测速时读到的真实落地机房正好在你所选地区里，未识别、没测的都不进。</span>
+    <span class="selinfo">「测通」以你在本页的检测 / 测速结果为准：超时的、没测的，都不进快照。「按实测落地导出」指把检测 / 测速时读到的真实落地当作这条 IP 的地区重新打标签（测出落香港，导出的就是香港），不按你所选地区过滤，未测、未识别的都不进；这一档导出的名字尾巴带不带源标注，看②的导出格式：选了 {来源} 或 {标签} 才带，没选就不带，免得下游按名字认错地区。</span>
   </div>
   <div class="ctrl">
     <button class="btn" id="btnSnap">📌 把当前清单存为快照订阅（本地测通版）</button>
@@ -390,7 +390,7 @@ footer a{color:var(--acc2);text-decoration:none}
     <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 38 个公开优选源拉取清单（28 个 IP 源 + 10 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（比如换成 Base64 编码订阅、分享链接、JSON / CSV 数据文件）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<b>再强调一遍：源标注地区 ≠ 你用时的落地。</b>Cloudflare 的 IP 是全球任播，同一个 IP 在哪落地看你的线路，国内访问多半落地香港/日本/新加坡——标着「美国」的 IP，你用时落到香港是常事，不是本站标错，是任播本来就这样。想知道自己的真实落地，用②清单的本地检测 / 本地测速：测通的条目会多出一列「实测落地」（读 trace 机房信息），还能按实测落地过滤；浏览器限制读不到机房的标「未识别」，本站不拿源标注冒充实测。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP:端口 只算一次（同 IP 不同端口算不同条目）；某个源某轮抓取失败时，先沿用它上一轮的数据顶着并在「来源」里如实标注，连续多轮（6 轮）都失败才会停用它的数据。页面顶部「更新于」就是最近一轮的时间。<br>
     <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 请求（超时统一 5 秒）：收到响应 = 确认可达并计耗时；连接被拒、超时、或证书与 IP 不匹配都会记为「未确认」——浏览器里没法区分这几种情况，未确认不等于不可用（有些 IP 证书对不上但配上域名照样能用）。确认可达也不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
-    <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。还有一种按落地存的：快照范围选「只存实测落地对得上的」，存的是本地检测 / 测速时在你自己线路上读到的真实落地、正好落在你所选地区里的那批。两类订阅的根本区别就在这：实时订阅链接是服务端按源标注地区现算的，服务端测不了你的线路，只能按标注给；实测落地快照是浏览器在你这边测完再存的，落地最准，代价是不自动更新——线路变了、或者想用上新一轮数据，就重测一次、重存一次。<br>
+    <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。还有一种按落地存的：快照范围选「按实测落地导出」，存的时候会把每条 IP 的地区标签换成你在自己线路上实测到的落地——源标注写美国、你这边实测落香港，导出的快照里它就是香港，名字、序号、分组全按香港算；不按所选地区过滤，实测出什么地区就导什么地区。导出的名字尾巴带不带源标注由导出格式决定：格式里选了 {来源} 或 {标签} 才带，没选就整段去掉、只剩实测地区的名字，免得下游（CFNext、代理规则）按名字提炼地区时被原标注带偏。两类订阅的根本区别就在这：实时订阅链接是服务端按源标注地区现算的，服务端测不了你的线路，只能按标注给；实测落地快照是浏览器在你这边测完再存的，地区是真落地，最准，代价是不自动更新——线路变了、或者想用上新一轮数据，就重测一次、重存一次。<br>
     <b>⑤ 条数为什么比别家少。</b>本站只收各源实测后发布的成品清单，不自己扫网段：无地区标注的剔除、同一 IP:端口 只算一次、每轮重建不攒失效库存 — 所以每个源标注地区是几十到几百条的实测口径。别家「每地区几千条」多是扫描官方段的未实测地址或未去重的堆叠；想要量，用⑥大池采样（官方段采样 + 本地检测自己筛）。<br>
     <b>⑥ 其他口径。</b>四网（移动/电信/联通/广电）里，<b>广电全网暂无公开实测源</b> — 选广电时给的是通用条目，广电用户请务必用本地检测在自家网络实测筛选。「送复检站」会复制当前清单并打开你选的 IP 监测站（推荐 IPCheck.ing，也可自填任意监测站地址，选择保存在本地浏览器）。优选域名由第三方维护，晚高峰可能变卡，作回退入口更合适。优选 IP 时效性强，失效条目以下一次聚合为准。
   </div>
@@ -420,9 +420,9 @@ const COLO_CN = {SIN:'新加坡', HKG:'香港', NRT:'东京', KIX:'大阪', ICN:
   SYD:'悉尼', MEL:'墨尔本', BNE:'布里斯班', AKL:'奥克兰', BOM:'孟买', DEL:'德里',
   GRU:'圣保罗', YYZ:'多伦多', YVR:'温哥华', KUL:'吉隆坡', BKK:'曼谷', HAN:'河内', MNL:'马尼拉', CGK:'雅加达'};
 const coloZh = c => esc(c ? (COLO_CN[c] ? c + ' ' + COLO_CN[c] : c) : '');
-// 机房三字码 → 所属国家/地区代码：给快照「只存实测落地对得上的」判断落地与所选
-// 地区对不对得上用。覆盖范围以 COLO_CN 收录的城市为准，另补 HND 与美国常见机房；
-// 表里没有的机房不猜——视为对不上，不进这一档。
+// 机房三字码 → 所属国家/地区代码：给快照「按实测落地导出」把机房换成地区代码、
+// 重新打标签用。覆盖范围以 COLO_CN 收录的城市为准，另补 HND 与美国常见机房；
+// 表里没有的机房不猜——不进这一档。
 const COLO_CC = {SIN:'SG', HKG:'HK', NRT:'JP', HND:'JP', KIX:'JP', ICN:'KR', TPE:'TW',
   LAX:'US', SJC:'US', DFW:'US', ORD:'US', IAD:'US', EWR:'US', JFK:'US', MIA:'US', SEA:'US',
   PDX:'US', DEN:'US', ATL:'US', BOS:'US', PHX:'US', LAS:'US', SLC:'US', MSP:'US', DTW:'US',
@@ -1140,20 +1140,28 @@ async function refreshSub(){
     if(seq === subRefreshSeq) el.value = short;
   }catch(e){ /* 预设失败就停在问号版，照常可用 */ }
 }
-// 「只存实测落地对得上」这一档：realLoc 已识别出机房、且机房所属地区（COLO_CC）
-// 正好在当前所选地区集合里的条目。未测（无键）、未识别（''）、机房不在表里的都不进。
-function snapLocLines(){
-  return RESULT.filter(l => {
+// 「按实测落地导出」这一档：realLoc 已识别出机房的条目，把行首的源标注地区码
+// 改写成实测机房所属地区（COLO_CC），后续 formatLines 就按实测地区重排名字、
+// 按实测地区重新数序号、按实测地区分组；不按所选地区过滤——实测出什么地区
+// 就导什么地区。未测（无键）、未识别（''）、机房不在 COLO_CC 表里的都不进。
+// 原始行上的方括号源标注在改写时原样留着：渲染名字时它只经导出格式的
+// {来源}/{标签} 变量进名字（没选这两个变量就整段不出现），且 {延迟}/{网速}
+// 的源标注值也要从里面取——所以不能在改写这一步先删掉。
+function snapRelabelLines(){
+  const out = [];
+  for(const l of RESULT){
     const c = realLoc[parseLine(l).addr];
-    if(!c) return false;
+    if(!c) continue;
     const cc = COLO_CC[c];
-    return !!cc && selected.has(cc);
-  });
+    if(!cc) continue;
+    out.push(l.replace(/^(\S+?)#[A-Z]{2}\d*/, '$1#' + cc));
+  }
+  return out;
 }
 function snapScopeLines(){
   const scope = $('snapScope').value;
   if(scope === 'all') return RESULT.slice();
-  if(scope === 'loc') return snapLocLines();
+  if(scope === 'loc') return snapRelabelLines();
   const cap = scope === 'ms' ? Math.max(1, +$('snapMs').value || 300) : Infinity;
   return RESULT.filter(l => {
     const ms = lat[parseLine(l).addr];
@@ -1163,7 +1171,7 @@ function snapScopeLines(){
 $('btnSnap').addEventListener('click', async () => {
   if(!RESULT.length){ toast('先生成清单，再存快照'); return; }
   const scope = $('snapScope').value;
-  // 「实测落地对得上」这一档靠 realLoc，而识别是在检测 / 测速的收尾自动跑的：
+  // 「按实测落地导出」这一档靠 realLoc，而识别是在检测 / 测速的收尾自动跑的：
   // 清单里一条识别记录都没有 = 还没跑过，先明确提示去跑，不静默存空
   const locTried = RESULT.some(l => realLoc[parseLine(l).addr] !== undefined);
   const locFound = RESULT.filter(l => realLoc[parseLine(l).addr]).length;
@@ -1174,7 +1182,7 @@ $('btnSnap').addEventListener('click', async () => {
   const lines = snapScopeLines();
   if(!lines.length){
     toast(scope === 'all' ? '清单是空的'
-      : scope === 'loc' ? `一条都没对上：清单 ${RESULT.length} 条里实测识别出 ${locFound} 条机房，没有一条落在你所选的地区里（源标注≠落地，可换个地区组合或换个范围）`
+      : scope === 'loc' ? `一条都没法导出：清单 ${RESULT.length} 条里实测识别出 ${locFound} 条机房，能对上地区表的 0 条（未测、未识别、机房不在表里的都不进这一档）`
       : '还没有测通的数据：先在①点「检测本地可用」或在②点「本地测速」，再存快照');
     return;
   }
@@ -1191,7 +1199,7 @@ $('btnSnap').addEventListener('click', async () => {
     toast(scope === 'all'
       ? `已存快照订阅：${lines.length} 条（清单全部）`
       : scope === 'loc'
-        ? `已存快照订阅：清单 ${RESULT.length} 条，实测识别出 ${locFound} 条，落地对得上所选地区的 ${lines.length} 条，本次存 ${lines.length} 条`
+        ? `已存快照订阅：清单 ${RESULT.length} 条，实测识别出 ${locFound} 条，按实测落地导出 ${lines.length} 条（地区已按实测重新打标签）`
         : `已存快照订阅：${lines.length} 条测通的（清单 ${RESULT.length} 条，超时/未测的已剔除）`);
   }catch(e){ toast(typeof e === 'string' ? `存快照失败：${e}` : '存快照失败，稍后再试'); }
   $('btnSnap').disabled = false;
