@@ -1,4 +1,4 @@
-// /probe —— 「检测地区（实测落地）」的后端接口（v1.31）。
+// /probe —— 「检测地区（实测落地）」的后端接口（v1.31；v1.31.2 修分块调用）。
 //
 // 干什么：访客在页面点「开始测地区」时，页面把一批 IP 发到这里；本接口在
 // 部署者自己的 Cloudflare 域名（zone）下，给每个 IP 临时建一条 DNS-only
@@ -30,6 +30,9 @@
 //   - 单批最多 100 个 IP；zone 内 cfp 前缀临时记录存量上限 300；
 //   - 每次建记录前先清扫：cfp 前缀且创建超过 10 分钟的记录先删（页面中途
 //     关掉、没调 DELETE 的孤儿记录靠它回收）。
+//   - 建/删记录一律分块走批量接口（见下方 CHUNK 注释）：批量接口单次
+//     操作数有上限、免费版每次调用的子请求也有上限，无上限逐个调用会
+//     在几百条时把额度耗尽并拖出平台 502（v1.31.2 修的就是这个）。
 
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LABEL_PREFIX = "cfp";
@@ -121,24 +124,90 @@ async function listAllRecords(cfg) {
   return out;
 }
 
-// 批量删优先，批量接口失败则逐个删兜底；返回实际删掉的条数（尽力而为，
-// 删不掉的残留会被下一次 POST 的清扫回收）。
+// ── 分块调用（v1.31.2 的关键修复）──────────────────────────────
+// 实测过的两个平台约束：① 批量接口单次操作数上限约 200，超了整批被拒；
+// ② 免费版每次接口调用的子请求上限约 50——老版「批量失败就逐个删」在
+// 几百条时会撞上这个上限，一次最多真删 ~49 条，还会把后续调用的子请求
+// 额度耗尽、拖成平台 502。所以建/删一律按 50 一组走批量接口：
+// 每组失败重试一次，再失败就对半拆开继续；逐个调用只允许用在最后
+// ≤10 条的小块上兜底，绝不无上限逐个跑。
+const CHUNK = 50;
+const SINGLE_MAX = 10;
+
+async function batchDeleteOnce(cfg, ids) {
+  const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/batch`, {
+    method: "POST",
+    body: JSON.stringify({ deletes: ids.map(id => ({ id })) }),
+  });
+  return ((data.result && data.result.deletes) || []).length;
+}
+
+// 分块删，返回实际删掉的条数（尽力而为，删不掉的残留会被下一次
+// POST 的清扫回收）。
 async function deleteRecords(cfg, ids) {
-  if (!ids.length) return 0;
-  try {
-    const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/batch`, {
-      method: "POST",
-      body: JSON.stringify({ deletes: ids.map(id => ({ id })) }),
-    });
-    return ((data.result && data.result.deletes) || []).length;
-  } catch (e) {
-    let n = 0;
-    for (const id of ids) {
-      try { await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/${id}`, { method: "DELETE" }); n++; }
-      catch (e2) { /* 单条删失败不中断其余 */ }
+  let deleted = 0;
+  async function delChunk(chunk) {
+    if (!chunk.length) return;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { deleted += await batchDeleteOnce(cfg, chunk); return; }
+      catch (e) { /* 重试一次，仍失败就对半拆 */ }
     }
-    return n;
+    if (chunk.length > SINGLE_MAX) {
+      const mid = Math.ceil(chunk.length / 2);
+      await delChunk(chunk.slice(0, mid));
+      await delChunk(chunk.slice(mid));
+      return;
+    }
+    for (const id of chunk) {
+      try { await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/${id}`, { method: "DELETE" }); deleted++; }
+      catch (e) { /* 单条删失败不中断其余 */ }
+    }
   }
+  for (let i = 0; i < ids.length; i += CHUNK)
+    await delChunk(ids.slice(i, i + CHUNK));
+  return deleted;
+}
+
+async function batchCreateOnce(cfg, chunk) {
+  const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/batch`, {
+    method: "POST",
+    body: JSON.stringify({ posts: chunk.map(w => ({ type: "A", name: w.name, content: w.ip, proxied: false, ttl: 60 })) }),
+  });
+  return (data.result && data.result.posts) || [];
+}
+
+// 分块建：与删除同一套路（50 一组、失败重试一次→对半拆、逐个兜底
+// 只用在 ≤10 条的小块）。建成的记录收进 got（name -> record）。
+async function createRecords(cfg, want, got) {
+  async function createChunk(chunk) {
+    if (!chunk.length) return;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const recs = await batchCreateOnce(cfg, chunk);
+        for (const rec of recs) got.set(rec.name, rec);
+        break;
+      } catch (e) { /* 重试一次，仍失败走下面拆分/逐个 */ }
+    }
+    const missing = chunk.filter(w => !got.has(w.name));
+    if (!missing.length) return;
+    if (missing.length > SINGLE_MAX) {
+      const mid = Math.ceil(missing.length / 2);
+      await createChunk(missing.slice(0, mid));
+      await createChunk(missing.slice(mid));
+      return;
+    }
+    for (const w of missing) {
+      try {
+        const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records`, {
+          method: "POST",
+          body: JSON.stringify({ type: "A", name: w.name, content: w.ip, proxied: false, ttl: 60 }),
+        });
+        if (data.result) got.set(w.name, data.result);
+      } catch (e) { /* 单条失败不中断其余，最后按缺失处理 */ }
+    }
+  }
+  for (let i = 0; i < want.length; i += CHUNK)
+    await createChunk(want.slice(i, i + CHUNK));
 }
 
 export async function onRequestGet(context) {
@@ -169,31 +238,19 @@ export async function onRequestPost(context) {
     const alive = mine.length - stale.length;
     if (alive + ips.length > MAX_ALIVE)
       return json({ error: `too many temp records（临时记录存量 ${alive}，加上本批将超过上限 ${MAX_ALIVE}，请稍后再试）` }, 429);
-    // 建记录：批量优先，失败逐个兜底
+    // 建记录：分块批量（50 一组），拆法见 createRecords
     const want = ips.map(ip => ({ ip, name: randLabel() + "." + cfg.zoneName }));
     const got = new Map(); // name -> record
-    try {
-      const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records/batch`, {
-        method: "POST",
-        body: JSON.stringify({ posts: want.map(w => ({ type: "A", name: w.name, content: w.ip, proxied: false, ttl: 60 })) }),
-      });
-      for (const rec of (data.result && data.result.posts) || []) got.set(rec.name, rec);
-    } catch (e) { /* 落到逐个建 */ }
-    for (const w of want) {
-      if (got.has(w.name)) continue;
-      try {
-        const data = await cfApi(cfg, `/zones/${cfg.zoneId}/dns_records`, {
-          method: "POST",
-          body: JSON.stringify({ type: "A", name: w.name, content: w.ip, proxied: false, ttl: 60 }),
-        });
-        if (data.result) got.set(w.name, data.result);
-      } catch (e) { /* 单条失败不中断其余，最后按缺失处理 */ }
-    }
-    // 仍缺 id 的回查列表按 name 匹配（批量响应偶有不回 id 的情况）
+    await createRecords(cfg, want, got);
+    // 仍缺记录/id 时才回查列表按 name 匹配（批量响应偶有不回 id 的情况）。
+    // 回查失败绝不许把整个请求拖成 502：已建好的 hosts 照常返回，缺 id
+    // 的条目页面照样能测（只是本轮删不掉它），残留交给下一次 POST 清扫。
     const missing = want.filter(w => !got.has(w.name) || !got.get(w.name).id);
     if (missing.length) {
-      const again = await listAllRecords(cfg);
-      for (const rec of again) if (isCfpName(cfg, rec.name)) got.set(rec.name, rec);
+      try {
+        const again = await listAllRecords(cfg);
+        for (const rec of again) if (isCfpName(cfg, rec.name)) got.set(rec.name, rec);
+      } catch (e) { /* 回查失败不影响已建成的结果 */ }
     }
     const hosts = want.filter(w => got.has(w.name))
       .map(w => ({ ip: w.ip, host: w.name, id: got.get(w.name).id || null }));
