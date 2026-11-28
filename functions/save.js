@@ -1,7 +1,10 @@
 // POST /save {text} → {id, url}：把访客当前清单存为快照订阅（KV: SNAP）
 // POST /save {mode:"preset", params} → {code, url}：把一组订阅参数存为
 // 预设（v1.24），页面据此展示短链 /s/<短码>.txt，见文件后半 handlePreset。
+// POST /save {mode:"locmap", map, fmt} → {code, url}：把一轮测地区结果
+// （IP → 真实地区映射）存为短链（v1.33），见文件末尾 handleLocmap。
 import { handleSub } from "./_sub_core.js";
+import { validLocmap, cleanLocmapFmt, locmapCode, LOCMAP_TTL } from "./_locmap.js";
 // 快照是定格版（可含本地测通筛选），不随聚合变化；保留 180 天；链接即凭证（内容本就是公开 IP 清单）。
 // id 由内容 SHA-256 派生（同内容同 id）：重复保存直接返回已有链接、零写入，
 // 既省 KV 写额度，也让「同一份清单永远同一个链接」。
@@ -127,6 +130,7 @@ export async function onRequestPost(context) {
     return new Response(JSON.stringify({ error: "snapshot storage not configured（快照存储未配置：本站未绑定 SNAP KV）" }), { status: 501, headers });
   const body = await context.request.json().catch(() => null);
   if (body && body.mode === "preset") return handlePreset(context, body, headers);
+  if (body && body.mode === "locmap") return handleLocmap(context, body, headers);
   const text = body && typeof body.text === "string" ? body.text : "";
   const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
   if (!lines.length || lines.length > 5000 || text.length > 300000)
@@ -282,6 +286,83 @@ async function handlePreset(context, body, headers) {
   }
   try {
     await context.env.SNAP.put("preset:" + code, presetCanon(params)); // 永不过期
+  } catch (e) {
+    await release();
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
+  return new Response(JSON.stringify({ code, url }), { headers });
+}
+
+// ── 测地区结果（v1.33）：{mode:"locmap", map:{ip:地区}, fmt} → {code, url} ──
+// 页面把一轮测地区的结果（实测 + 注册地补标合成的 IP → 地区映射）存
+// 成短链 /s/<短码>.txt，客户端拉取时由 _locmap.js 拿当前池 ∩ 映射
+// 现算——剪贴板导出是一次性的，订阅链接才能让客户端自动跟着池子
+// 刷新。短码由内容派生（见 _locmap.js locmapCode）：同一份映射永远
+// 同一个码。记录 30 天自动过期（KV expirationTtl）：测地区结果本来
+// 就只对当时的线路有意义，过期删掉不占地方；链接过期后拉取回 404
+// 并写明「请重新测地区生成」。
+// 限额与快照/预设同口径：独立计数文档 rl:locmap:<北京时间日期>，
+// 全站每日最多 200 个新映射、单 IP 100 个，先占额再写对象、失败退还。
+async function handleLocmap(context, body, headers) {
+  if (!validLocmap(body.map))
+    return new Response(JSON.stringify({ error: "invalid map（映射无效：须为 1–2000 条「公网 IPv4 → 合法地区代码」）" }), { status: 400, headers });
+  const map = body.map;
+  const fmt = cleanLocmapFmt(body.fmt);
+  const code = await locmapCode(map, fmt);
+  const url = new URL("/s/" + code + ".txt", context.request.url).href;
+  const key = "locmap:" + code;
+  // 同一份映射已存过：新鲜（≤24 小时）直接返回已有短码，不写 KV、
+  // 不计限额；超过一天则顺手续期重写（同内容同码，仍不计限额）——
+  // 免得积极重测的访客手里那条链接在第 30 天悄悄过期。
+  const existingRaw = await context.env.SNAP.get(key);
+  if (existingRaw) {
+    let rec = null;
+    try { rec = JSON.parse(existingRaw); } catch (e) { rec = null; }
+    const age = rec && rec.created ? Date.now() - rec.created : Infinity;
+    if (age <= 24 * 3600e3)
+      return new Response(JSON.stringify({ code, url }), { headers });
+    try {
+      await context.env.SNAP.put(key,
+        JSON.stringify({ v: 1, created: Date.now(), fmt, map }),
+        { expirationTtl: LOCMAP_TTL });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+    }
+    return new Response(JSON.stringify({ code, url }), { headers });
+  }
+  const ip = context.request.headers.get("cf-connecting-ip") || "unknown";
+  const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const rlKey = "rl:locmap:" + day;
+  const readDoc = async () => {
+    try { return JSON.parse((await context.env.SNAP.get(rlKey)) || "null") || { total: 0, ips: {} }; }
+    catch (e) { return { total: 0, ips: {} }; /* 计数文档损坏按零起算 */ }
+  };
+  const writeDoc = d => context.env.SNAP.put(rlKey, JSON.stringify(d), { expirationTtl: 2 * 24 * 3600 });
+  const release = async () => {
+    const d = await readDoc();
+    d.total = Math.max(0, d.total - 1);
+    d.ips[ip] = Math.max(0, (d.ips[ip] || 0) - 1);
+    await writeDoc(d).catch(() => {});
+  };
+  let doc = await readDoc();
+  if ((doc.ips[ip] || 0) >= 100 || doc.total >= 200)
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日生成次数已达上限，明天再来）" }), { status: 429, headers });
+  doc.total += 1;
+  doc.ips[ip] = (doc.ips[ip] || 0) + 1;
+  try {
+    await writeDoc(doc); // 先占额
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
+  }
+  const after = await readDoc(); // 占额后全站复核
+  if (after.total > 200) {
+    await release();
+    return new Response(JSON.stringify({ error: "daily save limit reached（今日生成次数已达上限，明天再来）" }), { status: 429, headers });
+  }
+  try {
+    await context.env.SNAP.put(key,
+      JSON.stringify({ v: 1, created: Date.now(), fmt, map }),
+      { expirationTtl: LOCMAP_TTL });
   } catch (e) {
     await release();
     return new Response(JSON.stringify({ error: "save failed, please retry（保存失败，请重试）" }), { status: 502, headers });
