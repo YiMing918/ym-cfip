@@ -13,7 +13,11 @@
 //      后失败；老版「一次全删 + 逐个兜底」在这两个约束下必挂；
 //   ⑨ 分块建记录：POST 100 个 IP 全成功（逐个建会撞 50 次上限）；
 //   ⑩ 批量响应不回 id 时靠回查列表补 id；回查失败也不许拖成 502，
-//      已建好的 hosts（id 为 null）照常返回。
+//      已建好的 hosts（id 为 null）照常返回；
+//   ⑪ 部分成功（v1.31.3）：stub 模拟真实 API 的「批量只成功约 60%」
+//      ——整批回 200，但 result 只含成功子集；断言函数靠集合差追完：
+//      建 100 个 IP 仍 100% 建成（failed 为空）、删 100 个 id 仍 100%
+//      删净（remaining 为空），且子请求预算守住（POST <45、DELETE <30）。
 
 let pass = 0, failN = 0;
 const chk = (name, cond, extra = '') => { if (cond) { pass++; console.log('PASS', name); } else { failN++; console.log('FAIL', name, extra); } };
@@ -25,16 +29,21 @@ let records = [];
 let nextId = 1;
 let individualCalls = 0;   // 逐个建/删的累计次数（每次 onRequest 调用前不清零，场景间靠 resetZone 清）
 let listCalls = 0;
+let fetchCalls = 0;        // 本场景内 fetch 总次数（子请求预算断言用）
+let batchSeq = 0;          // 批量调用序号（部分成功模型轮换子集用）
 let dropBatchIds = false;      // 批量建的响应不回 id（记录本身有 id，靠回查补）
 let failListAfterFirst = false; // 第一次之后的列表查询全失败（模拟回查挂掉）
+let partialBatch = false;      // 部分成功模型：批量每次只成功约 60%（轮换子集）
 const resetZone = () => {
   records = []; nextId = 1; individualCalls = 0; listCalls = 0;
-  dropBatchIds = false; failListAfterFirst = false;
+  fetchCalls = 0; batchSeq = 0;
+  dropBatchIds = false; failListAfterFirst = false; partialBatch = false;
 };
 const j = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
 const err = (message, status = 500) => j({ success: false, errors: [{ message }] }, status);
 
 globalThis.fetch = async (url, opts = {}) => {
+  fetchCalls++;
   const u = new URL(String(url));
   if (u.origin !== 'https://api.cloudflare.com') throw new Error('unexpected fetch: ' + url);
   const path = u.pathname.replace('/client/v4', '');
@@ -48,13 +57,17 @@ globalThis.fetch = async (url, opts = {}) => {
   if (method === 'POST' && /^\/zones\/[^/]+\/dns_records\/batch$/.test(path)) {
     const nOps = (body.posts || []).length + (body.deletes || []).length;
     if (nOps > 200) return err('batch too large: max 200 operations', 400);
+    batchSeq++;
+    // 部分成功模型：只处理轮换到的约 60% 子集，其余既不执行也不出现
+    // 在 result 里（和真实 API 一样：回 200、success:true，只含成功项）。
+    const pick = arr => partialBatch ? arr.filter((_, i) => ((i + batchSeq) % 5) < 3) : arr;
     const out = { posts: [], deletes: [] };
-    for (const p of body.posts || []) {
+    for (const p of pick(body.posts || [])) {
       const rec = { id: 'rec' + String(nextId++).padStart(4, '0'), created_on: new Date().toISOString(), ...p };
       records.push(rec);
       out.posts.push(dropBatchIds ? (({ id, ...rest }) => rest)(rec) : rec);
     }
-    for (const d of body.deletes || []) {
+    for (const d of pick(body.deletes || [])) {
       const i = records.findIndex(r => r.id === d.id);
       if (i >= 0) { out.deletes.push(records[i]); records.splice(i, 1); }
     }
@@ -113,6 +126,7 @@ const ctx = (env, method, body, headers = {}) => ({
   chk('host 名形如 cfp[10位].zone', data.hosts.every(h => nameRe.test(h.host)), JSON.stringify(data.hosts));
   chk('hosts 带 id 且与 ip 对应', data.hosts.every(h => h.id) &&
     data.hosts.find(h => h.ip === '1.2.3.4') && data.hosts.find(h => h.ip === '5.6.7.8'));
+  chk('POST 响应带 failed 字段（本场景为空）', Array.isArray(data.failed) && data.failed.length === 0, JSON.stringify(data.failed));
   chk('假 zone 里记录 proxied:false / ttl:60 / content 对得上',
     records.length === 2 && records.every(rec => rec.proxied === false && rec.ttl === 60 && rec.type === 'A') &&
     records.some(rec => rec.content === '1.2.3.4') && records.some(rec => rec.content === '5.6.7.8'),
@@ -169,6 +183,7 @@ const ctx = (env, method, body, headers = {}) => ({
   const r = await onRequestDelete(ctx(CFG_ENV, 'DELETE', { ids }));
   const data = await r.json();
   chk('DELETE 回 deleted 数对', r.status === 200 && data.deleted === ids.length, JSON.stringify(data));
+  chk('DELETE 响应带 remaining 字段（本场景为空）', Array.isArray(data.remaining) && data.remaining.length === 0, JSON.stringify(data.remaining));
   chk('DELETE 后假 zone 里记录清空', records.length === 0, JSON.stringify(records.map(x => x.id)));
 }
 
@@ -194,6 +209,7 @@ const ctx = (env, method, body, headers = {}) => ({
   const r = await onRequestDelete(ctx(CFG_ENV, 'DELETE', { ids }));
   const data = await r.json();
   chk('删 240 个 id 回 deleted=240', r.status === 200 && data.deleted === 240, JSON.stringify(data).slice(0, 120));
+  chk('删 240 后 remaining 为空', Array.isArray(data.remaining) && data.remaining.length === 0, JSON.stringify(data.remaining));
   chk('删 240 后假 zone 清空', records.length === 0, 'left=' + records.length);
   chk('分块删没靠逐个调用硬撑（逐个次数 ≤50）', individualCalls <= 50, 'individualCalls=' + individualCalls);
 }
@@ -206,6 +222,7 @@ const ctx = (env, method, body, headers = {}) => ({
   const data = await r.json();
   chk('建 100 个 IP 回 200 且 hosts=100', r.status === 200 && data.hosts && data.hosts.length === 100,
     'status=' + r.status + ' hosts=' + (data.hosts && data.hosts.length));
+  chk('建 100 后 failed 为空', Array.isArray(data.failed) && data.failed.length === 0, JSON.stringify(data.failed));
   chk('建 100 后假 zone 记录=100 且都带 id', records.length === 100 && data.hosts.every(h => h.id),
     'records=' + records.length);
   chk('分块建没靠逐个调用硬撑（逐个次数 ≤50）', individualCalls <= 50, 'individualCalls=' + individualCalls);
@@ -228,6 +245,31 @@ const ctx = (env, method, body, headers = {}) => ({
   chk('回查失败不拖成 502（回 200）', r2.status === 200, 'status=' + r2.status + ' ' + JSON.stringify(data2).slice(0, 160));
   chk('回查失败时 hosts 照常返回（id 为 null）', data2.hosts && data2.hosts.length === 2 && data2.hosts.every(h => h.id === null),
     JSON.stringify(data2).slice(0, 200));
+}
+
+// ⑪ 部分成功模型（批量每次只成功约 60%）：靠集合差追完，建/删仍 100%
+{
+  resetZone();
+  partialBatch = true;
+  const ips = Array.from({ length: 100 }, (_, i) => `7.7.${Math.floor(i / 250)}.${(i % 250) + 1}`);
+  const r = await onRequestPost(ctx(CFG_ENV, 'POST', { ips }));
+  const data = await r.json();
+  chk('部分成功下建 100 个 IP 仍 hosts=100', r.status === 200 && data.hosts && data.hosts.length === 100,
+    'status=' + r.status + ' hosts=' + (data.hosts && data.hosts.length) + ' failed=' + JSON.stringify(data.failed));
+  chk('部分成功下建 100 后 failed 为空', Array.isArray(data.failed) && data.failed.length === 0, JSON.stringify(data.failed));
+  chk('部分成功下假 zone 记录恰好=100（没建出回执之外的）', records.length === 100, 'records=' + records.length);
+  chk('部分成功下 hosts 都带 id 且名字与 zone 记录对得上',
+    data.hosts.every(h => h.id) && data.hosts.every(h => records.some(rec => rec.name === h.host && rec.id === h.id)));
+  chk('POST 子请求预算 <45', fetchCalls < 45, 'fetchCalls=' + fetchCalls);
+
+  const ids = data.hosts.map(h => h.id);
+  const callsBefore = fetchCalls;
+  const rd = await onRequestDelete(ctx(CFG_ENV, 'DELETE', { ids }));
+  const dd = await rd.json();
+  chk('部分成功下删 100 个 id 仍 deleted=100', rd.status === 200 && dd.deleted === 100, JSON.stringify(dd).slice(0, 160));
+  chk('部分成功下删 100 后 remaining 为空', Array.isArray(dd.remaining) && dd.remaining.length === 0, JSON.stringify(dd.remaining));
+  chk('部分成功下删 100 后假 zone 清空', records.length === 0, 'left=' + records.length);
+  chk('DELETE 子请求预算 <30', fetchCalls - callsBefore < 30, 'deleteFetchCalls=' + (fetchCalls - callsBefore));
 }
 
 console.log(`\nTOTAL pass=${pass} fail=${failN}`);
