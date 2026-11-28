@@ -69,6 +69,7 @@ jobs:
           data/top.txt
           data/usjp.txt
           functions/_preset.js
+          functions/_locmap.js
           functions/_sub_core.js
           functions/probe.js
           functions/s/[id].js
