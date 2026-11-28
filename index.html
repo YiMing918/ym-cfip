@@ -384,7 +384,7 @@ footer a{color:var(--acc2);text-decoration:none}
   <div class="note">
     <b>① 数据从哪来。</b>本站只聚合、不测速：服务器定时从 38 个公开优选源拉取清单（28 个 IP 源 + 10 个域名源，明细见「来源」类目），统一格式、去重后生成总池；域名另经 DNS 解析筛除已失效的。个别源某轮收录为 0 时会在「来源」里注明原因（源格式变化 / 源内容异常），不是本站漏抓。另有一类破例：少数源（如 CFYes / 麒麟）只按运营商实测、不标地区，这类条目收在「三网专区」（地区代号 SW），在选地区时可像地区一样勾选 — 它们只有运营商口径、没有地区，介意纯粹性的可以不勾。源站改格式（比如换成 Base64 编码订阅、分享链接、JSON / CSV 数据文件）时聚合会自动换兼容解析跟上并在来源备注里标明，BestCF 系源还有双主机互备，主地址挂了自动换备用域名。地区与速度是各源在其测试地的标注：带测试地的源（如 svip-s）是在其测试地网络实测的，离你越近参考价值越高；全国源是全国口径。数据全站同一份，不分访客。<b>再强调一遍：源标注地区 ≠ 你用时的落地。</b>Cloudflare 的 IP 是全球任播，同一个 IP 在哪落地看你的线路，国内访问多半落地香港/日本/新加坡——标着「美国」的 IP，你用时落到香港是常事，不是本站标错，是任播本来就这样。想知道自己的真实落地为什么网页里测不了、怎么粗判，看⑦。<br>
     <b>② 多久更新、总池为什么会变。</b>默认每 2 小时重新聚合一轮（部署者可改这个频率）：每轮把所有源重新抓一遍、从零重建总池，所以总数是活数 — 源增它增、源减它减，同一 IP:端口 只算一次（同 IP 不同端口算不同条目）；某个源某轮抓取失败时，先沿用它上一轮的数据顶着并在「来源」里如实标注，连续多轮（6 轮）都失败才会停用它的数据。页面顶部「更新于」就是最近一轮的时间。<br>
-    <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 请求（超时统一 5 秒）：收到响应 = 确认可达并计耗时；连接被拒、超时、或证书与 IP 不匹配都会记为「未确认」——浏览器里没法区分这几种情况，未确认不等于不可用（有些 IP 证书对不上但配上域名照样能用）。确认可达也不等于节点可用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
+    <b>③ 本地检测是你自己的数据。</b>「检测本地可用 / 本地测速」在你的浏览器里向每个 IP 发起 HTTPS 请求（超时统一 5 秒）：结果分四类——收到响应＝真连通；握手到一半被断开（多半是证书与 IP 不匹配）＝握手可达，说明服务器摸得到、耗时约等于网络往返，配上域名照样能用的 IP 大多在这一类；快得不正常地失败（30 毫秒内）＝异常，多半是被重置/拦截，不算可用、也不会被当成「最快」；等到超时＝摸不到。真连通＋握手可达算「可用」。可用也不等于节点能用或速度达标；开着代理测的是经代理的连通性，想测直连先关代理。清单测速为双测取低值。测速结果只存在你浏览器里，所以生成数比检测数少时，页面会标注被运营商/门槛滤掉的条数，对得上账。<br>
     <b>④ 两种订阅怎么选。</b>不测速、想让客户端自己定时换新 IP → 用③的实时订阅链接，内容随每轮聚合自动更新；测了速、只想用自己测通的那批 → 用③里的快照订阅，把当前清单定格存成专属链接，不随聚合变化，重新测速后再存一次即可。<br>
     <b>⑤ 条数为什么比别家少。</b>本站只收各源实测后发布的成品清单，不自己扫网段：无地区标注的剔除、同一 IP:端口 只算一次、每轮重建不攒失效库存 — 所以每个源标注地区是几十到几百条的实测口径。别家「每地区几千条」多是扫描官方段的未实测地址或未去重的堆叠；想要量，用⑥大池采样（官方段采样 + 本地检测自己筛）。<br>
     <b>⑥ 其他口径。</b>四网（移动/电信/联通/广电）里，<b>广电全网暂无公开实测源</b> — 选广电时给的是通用条目，广电用户请务必用本地检测在自家网络实测筛选。「送复检站」会复制当前清单并打开你选的 IP 监测站（推荐 IPCheck.ing，也可自填任意监测站地址，选择保存在本地浏览器）。优选域名由第三方维护，晚高峰可能变卡，作回退入口更合适。优选 IP 时效性强，失效条目以下一次聚合为准。<br>
@@ -431,6 +431,7 @@ function syncCarrierChips(){
 }
 let RESULT = [];
 const lat = {}, lat6 = {};
+const latKind = {}; // addr -> ok|hs|rst|dead（probe 写入，显示与统计用）
 let availByRegion = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -685,6 +686,8 @@ function renderTable(){
     const v = lat[p.addr];
     let latHtml = '<span class="lat" style="color:var(--dim)">未测</span>';
     if(v === -1) latHtml = '<span class="lat bad">超时</span>';
+    else if(v === -2) latHtml = '<span class="lat bad">异常</span>';
+    else if(v !== undefined && latKind[p.addr] === 'hs') latHtml = `<span class="lat ${v<200?'mid':v<600?'mid':'bad'}" title="握手计时：浏览器建不起真连接，这是握手摸到服务器的耗时，只作相对比较">握手 ${v} ms</span>`;
     else if(v !== undefined) latHtml = `<span class="lat ${v<200?'good':v<600?'mid':'bad'}">${v} ms</span>`;
     return `<tr><td style="color:var(--dim)">${i+1}</td>` +
       `<td class="addr" data-line="${l.replace(/"/g,'&quot;')}" title="点击复制整行">${p.addr}</td>` +
@@ -706,30 +709,46 @@ function abortAllProbes(){
   activeCtors.clear();
 }
 let testing = false, domTesting = false, v6Scanning = false;
+const RST_MS = 30; // 失败快于此毫秒不算「快」：多半是被重置/拦截
+function classifyFail(dt, timedOut, aborted){
+  if(timedOut || aborted) return { v: -1, kind: 'dead' };
+  if(dt < RST_MS) return { v: -2, kind: 'rst' };
+  return { v: dt, kind: 'hs' };
+}
 function probe(addr, timeoutMs){
-  // 探测口径（已修正）：fetch(no-cors) 收到任何 HTTP 响应才算「确认可达」并
-  // 计耗时；连接被拒 / DNS 失败 / 超时 / TLS 证书不匹配都会 reject，记 -1
-  // 「未确认」。旧实现用图片探测且 onerror 也算通——被拒连接的报错最快，
-  // 死 IP 反而被排到最前。浏览器里无法区分「真死」与「证书对不上但可用」，
-  // 所以 -1 只表示未确认、不表示不可用，文案与导出都按这个口径。
+  // 探测口径（2026-11-28 再修）：浏览器连裸 IP 时 TLS 证书对不上号，真连接
+  // 建不起来——上一版口径「收到响应才算通」导致整池几乎全灭（实测 730 条
+  // 只认 1 条）。现按结果分四类：①fetch 真拿到响应＝真可达（ok）；②握手
+  // 进行到一半被断（多半证书不符）＝服务器确实摸到了、耗时≈网络往返，记
+  // 「握手可达」（hs，配上域名能用的 IP 大多在这一类）；③快得不正常地失
+  // 败（<30ms）＝多半被重置/拦截，记「异常」（rst，-2）——绝不当最快排前
+  // 面（那是 v1.17 前图片探测的老毛病）；④等到超时/被停止＝摸不到
+  // （dead，-1）。返回值约定不变：>=0 可用并计毫秒，-1 摸不到，-2 异常；
+  // 分类另存 latKind[addr]。hs 的耗时是握手计时、不是真连接速度，只作
+  // 相对比较。
   return new Promise(res => {
     let hostport;
     if(addr.startsWith('[')) hostport = addr;
     else { const [h, p] = addr.split(':'); hostport = `${h}:${p || 443}`; }
     const ctl = regCtl(new AbortController());
-    const timer = setTimeout(() => ctl.abort(), timeoutMs || 5000);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, timeoutMs || 5000);
     const t0 = performance.now();
     fetch(`https://${hostport}/favicon.ico?_=${Date.now()}`, {
       mode: 'no-cors', cache: 'no-store', signal: ctl.signal,
-    }).then(() => { clearTimeout(timer); unregCtl(ctl); res(Math.round(performance.now() - t0)); })
-      .catch(() => { clearTimeout(timer); unregCtl(ctl); res(-1); });
+    }).then(() => { clearTimeout(timer); unregCtl(ctl); latKind[addr] = 'ok'; res(Math.round(performance.now() - t0)); })
+      .catch(() => { clearTimeout(timer); unregCtl(ctl);
+        const c = classifyFail(Math.round(performance.now() - t0), timedOut, ctl.signal.aborted && !timedOut);
+        latKind[addr] = c.kind; res(c.v); });
   });
 }
 async function probe2(addr, timeoutMs){
   const a = await probe(addr, timeoutMs);
-  if(a < 0) return -1;
+  if(a < 0) return a;
+  const ka = latKind[addr];
   const b = await probe(addr, timeoutMs);
-  return b < 0 ? a : Math.min(a, b);
+  if(b < 0 || a <= b){ latKind[addr] = ka; return a; }
+  return b;
 }
 let scanning = false;
 async function scanPool(scope){
@@ -740,13 +759,15 @@ async function scanPool(scope){
   $('btnSelAvail').disabled = true;
   const lines = scope === 'sel' ? POOL.filter(l => selected.has(parseLine(l).region)) : POOL.slice();
   if(!lines.length){ scanning = false; $('btnScan').disabled = false; $('btnScanSel').disabled = false; $('btnStop').style.display = 'none'; toast('先选源标注地区再检测'); return; }
-  let idx = 0, doneN = 0, okN = 0;
+  let idx = 0, doneN = 0, okN = 0, okTrue = 0, hsN = 0, rstN = 0, deadN = 0;
   const total = lines.length;
   async function worker(){
     while(idx < total && scanning){
       const p = parseLine(lines[idx++]);
       lat[p.addr] = await probe(p.addr, 5000);
       if(lat[p.addr] >= 0) okN++;
+      const kd = latKind[p.addr];
+      if(kd === 'ok') okTrue++; else if(kd === 'hs') hsN++; else if(kd === 'rst') rstN++; else deadN++;
       doneN++;
       if(doneN % 25 === 0 || doneN === total){
         $('scaninfo').innerHTML = `检测中… 已测 <b>${doneN}</b>/${total} · 可用 <b>${okN}</b>`;
@@ -758,8 +779,8 @@ async function scanPool(scope){
   refreshAvail();
   const nRegionsOk = Object.values(availByRegion || {}).filter(v => v > 0).length;
   $('scaninfo').innerHTML = (scanning
-    ? `检测完成：<b>${okN}</b>/${total} 确认可达，分布在 <b>${nRegionsOk}</b> 个源标注地区（地区钮上的 ✓ 是该地区确认数；未确认≠不可用，可能是证书/网络受限没测出来）`
-    : `已停止：测了 ${doneN}/${total}，确认可达 <b>${okN}</b> 个`) + `<br>${regionStatText(lines)}`;
+    ? `检测完成：可用 <b>${okN}</b>/${total}（真连通 ${okTrue} · 握手可达 ${hsN}），分布在 <b>${nRegionsOk}</b> 个源标注地区（地区钮上的 ✓ 是可用数）｜异常（太快，多半被重置）${rstN} · 超时 ${deadN}`
+    : `已停止：测了 ${doneN}/${total}，可用 <b>${okN}</b> 个`) + `<br>${regionStatText(lines)}`;
   $('btnSelAvail').disabled = nRegionsOk === 0;
   scanning = false;
   $('btnScan').disabled = false; $('btnScanSel').disabled = false;
@@ -946,7 +967,7 @@ function renderV6(){
   $('v6box').textContent = POOL6.map(l => {
     const key = (l.match(/^\[[^\]]+\]:\d+/) || [l])[0];
     const v = lat6[key];
-    const mark = v === undefined ? '' : (v >= 0 ? ` ✓ ${v}ms` : ' ✗超时');
+    const mark = v === undefined ? '' : (v >= 0 ? ` ✓ ${v}ms` : (v === -2 ? ' ✗异常' : ' ✗超时'));
     return l + mark;
   }).join('\n');
 }
@@ -986,7 +1007,7 @@ async function scanV6(){
     LS.set('cfipV6Res', JSON.stringify({
       gen: META ? META.generated_at : '', lat6}));
   }catch(e){}
-  $('v6info').innerHTML = `${v6Scanning ? '检测完成' : '已停止'}：<b>${okN}</b>/${total} 确认可达（${total ? Math.round(okN / total * 100) : 0}%；未确认≠不可用）` +
+  $('v6info').innerHTML = `${v6Scanning ? '检测完成' : '已停止'}：可用 <b>${okN}</b>/${total}（${total ? Math.round(okN / total * 100) : 0}%；真连通+握手可达，异常/超时不算）` +
     (carStr ? `<br>分运营商可用：${carStr}` : '');
   $('btnV6CopyOk').disabled = okN === 0;
   v6Scanning = false;
@@ -1175,7 +1196,7 @@ $('btnTest').addEventListener('click', runTest);
 $('btnSort').addEventListener('click', () => {
   RESULT.sort((a, b) => {
     const va = lat[parseLine(a).addr], vb = lat[parseLine(b).addr];
-    return (va === undefined || va === -1 ? 1e9 : va) - (vb === undefined || vb === -1 ? 1e9 : vb);
+    return (va === undefined || va < 0 ? 1e9 : va) - (vb === undefined || vb < 0 ? 1e9 : vb);
   });
   if($('ordMode')) $('ordMode').value = 'asis';
   renderTable(); toast('已按本地延迟排序');
@@ -1221,6 +1242,7 @@ function sampleBig(){
 function bigLatHtml(i){
   const v = BIGRES[i];
   if(v === undefined) return '<span class="blat">未测</span>';
+  if(v === -2) return '<span class="blat bad">异常</span>';
   if(v < 0) return '<span class="blat bad">超时</span>';
   return `<span class="blat ok">${v} ms</span>`;
 }
@@ -1280,14 +1302,14 @@ async function scanBig(){
       BIGRES[i] = await probe(`${BIG[i].ip}:${BIG[i].port}`, 5000);
       if(BIGRES[i] >= 0) okN++;
       doneN++;
-      if(doneN % 50 === 0 || doneN === total){ $('bigInfo').textContent = `检测中… ${doneN}/${total} · 确认可达 ${okN}`; renderBig(); }
+      if(doneN % 50 === 0 || doneN === total){ $('bigInfo').textContent = `检测中… ${doneN}/${total} · 可用 ${okN}`; renderBig(); }
     }
   }
   await Promise.all(Array.from({ length: 16 }, worker));
   renderBig();
   $('bigInfo').textContent = bigScanning
-    ? `检测完成：${okN}/${total} 确认可达（浏览器探测，未确认≠不可用，仅作相对比较）`
-    : `已停止：测了 ${doneN}/${total}，确认可达 ${okN}`;
+    ? `检测完成：${okN}/${total} 可用（真连通+握手可达，浏览器探测，仅作相对比较）`
+    : `已停止：测了 ${doneN}/${total}，可用 ${okN}`;
   $('btnBigCopyOk').disabled = okN === 0;
   $('btnBigCopyOk').textContent = `只复制可用的（${okN}）`;
   bigScanning = false;
