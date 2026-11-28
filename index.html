@@ -293,13 +293,19 @@ footer a{color:var(--acc2);text-decoration:none}
 
 <div class="card loc-off" id="cLoc">
   <h3>检测地区（实测落地）</h3>
-  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测/注册地导出」，名字、分组全按识别地区重排。第三方中转服务器实测多半读不到机房，这类会用聚合时查好的 IP 注册地补标（行里标「注册地」，与实测明确分开）；要是你测过的延迟与注册地明显对不上（比如注册在美国却只要几十毫秒），那行会被标出来、且不进导出。没识别出、也没补上注册地的条目可以点「重试未识别」再测一遍（主要是 CF 官方段的偶发失败）。</div>
+  <div class="note">和「检测本地可用」<b>互相独立</b>：可以只测可用、只测地区，也可以两个都测，互不影响、不会自动串联。这个测的是你<b>当前网络</b>下、清单里每个 IP 真正落到的机房（地区）——网页直连裸 IP 会被证书挡住读不到机房，所以本站给每个 IP 临时挂一个本站域名下的子域名去连，测完临时记录自动清理。源标注与实测不一致的行会标出来；识别出的条目可以「按实测/注册地导出」，名字、分组全按识别地区重排；也可以「生成订阅链接」，把这轮结果存成一条订阅链接（30 天有效），填进客户端自动拉取，内容随池子更新刷新。第三方中转服务器实测多半读不到机房，这类会用聚合时查好的 IP 注册地补标（行里标「注册地」，与实测明确分开）；要是你测过的延迟与注册地明显对不上（比如注册在美国却只要几十毫秒），那行会被标出来、且不进导出。没识别出、也没补上注册地的条目可以点「重试未识别」再测一遍（主要是 CF 官方段的偶发失败）。</div>
   <div class="ctrl">
     <button class="btn primary" id="btnLoc">🌏 开始测地区</button>
     <button class="btn" id="btnLocStop" style="display:none">停止</button>
     <button class="btn" id="btnLocExport" disabled>按实测/注册地导出</button>
+    <button class="btn" id="btnLocLink" disabled>生成订阅链接</button>
     <button class="btn" id="btnLocRetry" style="display:none">重试未识别</button>
     <span class="selinfo" id="locinfo">对当前清单（②生成的结果）逐个测实测落地；清单为空时先在②生成清单。</span>
+  </div>
+  <div class="ctrl" id="locLinkRow" style="display:none">
+    <input id="locLinkUrl" readonly>
+    <button class="btn primary" id="btnLocCopyLink">复制链接</button>
+    <span class="selinfo">链接 30 天有效；池子每 2 小时更新、名单跟着刷新，没测过的新 IP 不会进；重新测地区后生成新链接、把软件里的旧链接换掉。</span>
   </div>
   <div id="loclist" style="margin-top:8px"></div>
 </div>
@@ -1928,6 +1934,7 @@ $('btnTopLink').addEventListener('click', () =>
   }
   async function locRunFlow(ips, byIp, v6n, isRetry){
     locRunning = true; locStop = false;
+    $('locLinkRow').style.display = 'none';   // 结果要变了，上一轮生成的订阅链接先收起
     $('btnLoc').disabled = true; $('btnLocRetry').disabled = true;
     $('btnLocStop').style.display = '';
     let doneN = 0;
@@ -1953,6 +1960,7 @@ $('btnTopLink').addEventListener('click', () =>
       $('btnLocStop').style.display = 'none';
       $('btnLocExport').disabled = Object.keys(realLoc).length === 0 &&
         !Object.values(geoLoc).some(g => !g.suspect);
+      $('btnLocLink').disabled = $('btnLocExport').disabled;
       const st = locStats();
       $('btnLocRetry').style.display = locTested.some(t => !t.colo && !geoLoc[t.ip]) ? '' : 'none';
       $('btnLocRetry').disabled = false;
@@ -2031,10 +2039,39 @@ $('btnTopLink').addEventListener('click', () =>
     if(!out.length){ toast('还没有识别出的条目，先点「开始测地区」'); return; }
     copyText(formatLines(groupByRegion(out)).join('\n'), `已按地区导出 ${out.length} 条（实测 ${out.length - geoN} 条 + 注册地补标 ${geoN} 条；没识别出的 ${miss} 条没进）`);
   }
+  async function genLocLink(){
+    // 合成映射与导出口径一致：注册地补标（未被延迟打脸的）打底、
+    // 实测覆盖——实测优先；suspect 不进。映射只存在页面里，POST 给
+    // /save 存进 KV 换短链（服务端只认映射本身，见 _locmap.js）。
+    const map = {};
+    for(const ip in geoLoc){ const g = geoLoc[ip]; if(g && !g.suspect && g.cc) map[ip] = g.cc; }
+    for(const ip in realLoc){ if(realLoc[ip] && realLoc[ip].cc) map[ip] = realLoc[ip].cc; }
+    if(!Object.keys(map).length){ toast('还没有识别出的条目，先点「开始测地区」'); return; }
+    const btn = $('btnLocLink');
+    btn.disabled = true;
+    try{
+      const r = await fetch(new URL('save', location.href).href, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'locmap', map, fmt: FMT }),
+      });
+      const d = await r.json().catch(() => null);
+      if(!r.ok || !d || !d.url)
+        throw new Error((d && d.error) || ('HTTP ' + r.status));
+      $('locLinkUrl').value = d.url;
+      $('locLinkRow').style.display = '';
+      toast('订阅链接已生成，30 天有效');
+    }catch(e){
+      toast('生成订阅链接失败：' + ((e && e.message) || e));
+    }finally{
+      btn.disabled = false;
+    }
+  }
   $('btnLoc').addEventListener('click', runLocTest);
   $('btnLocRetry').addEventListener('click', runLocRetry);
   $('btnLocStop').addEventListener('click', () => { locStop = true; });
   $('btnLocExport').addEventListener('click', exportByRealLoc);
+  $('btnLocLink').addEventListener('click', genLocLink);
+  $('btnLocCopyLink').addEventListener('click', () => copyText($('locLinkUrl').value, '订阅链接已复制'));
   // 未配置的部署整张卡不显示：先问 /probe，确认配好了才亮出来
   fetch('/probe').then(r => r.json()).then(d => { if(d && d.configured) $('cLoc').classList.remove('loc-off'); }).catch(() => {});
 
